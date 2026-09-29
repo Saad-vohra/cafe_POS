@@ -10,6 +10,8 @@ import Reports from './Reports';
 import Staff from './Staff';
 import Takeaway from './Takeaway';
 
+import StaffScanQR from './StaffScanQR';
+
 export default function AdminLayout() {
   return (
     <div className="app-layout">
@@ -24,6 +26,7 @@ export default function AdminLayout() {
           <Route path="billing" element={<Billing />} />
           <Route path="reports" element={<Reports />} />
           <Route path="staff" element={<Staff />} />
+          <Route path="scan-qr" element={<StaffScanQR />} />
           <Route path="*" element={<Navigate to="dashboard" />} />
         </Routes>
       </div>

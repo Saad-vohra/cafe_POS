@@ -9,6 +9,7 @@ const billSchema = new mongoose.Schema({
   tableNumber: { type: Number, required: false },
   customerName: { type: String, default: '' },
   customerPhone: { type: String, default: '' },
+  customerId: { type: mongoose.Schema.Types.ObjectId, ref: 'Customer' },
   takeawayToken: { type: String, default: '' },
   items: [{
     name: String,
@@ -17,6 +18,12 @@ const billSchema = new mongoose.Schema({
     total: Number
   }],
   subtotal: { type: Number, required: true },
+  discountAmount: { type: Number, default: 0 },
+  appliedReward: {
+    rewardId: { type: String },
+    title: { type: String },
+    discountAmount: { type: Number, default: 0 }
+  },
   gstRate: { type: Number, default: 5 },
   gstAmount: { type: Number, default: 0 },
   totalAmount: { type: Number, required: true },

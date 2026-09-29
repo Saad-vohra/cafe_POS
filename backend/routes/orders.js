@@ -131,14 +131,16 @@ const express = require('express');
 const router = express.Router();
 const Order = require('../models/Order');
 const Table = require('../models/Table');
-const { auth } = require('../middleware/auth');
+const { auth, optionalAuth } = require('../middleware/auth');
+const Customer = require('../models/Customer');
 
 // Get all orders
-router.get('/', auth, async (req, res) => {
+router.get('/', optionalAuth, async (req, res) => {
   try {
-    const filter = { restaurantId: req.restaurantId };
+    const filter = {};
+    if (req.restaurantId) filter.restaurantId = req.restaurantId;
     if (req.query.status) filter.status = req.query.status;
-    if (req.query.tableNumber) filter.tableNumber = req.query.tableNumber;
+    if (req.query.tableNumber) filter.tableNumber = parseInt(req.query.tableNumber, 10);
     if (req.query.orderType) filter.orderType = req.query.orderType;
     if (req.query.active === 'true') {
       filter.status = { $nin: ['completed', 'cancelled'] };
@@ -151,9 +153,11 @@ router.get('/', auth, async (req, res) => {
 });
 
 // Get single order
-router.get('/:id', auth, async (req, res) => {
+router.get('/:id', optionalAuth, async (req, res) => {
   try {
-    const order = await Order.findOne({ _id: req.params.id, restaurantId: req.restaurantId });
+    const query = { _id: req.params.id };
+    if (req.restaurantId) query.restaurantId = req.restaurantId;
+    const order = await Order.findOne(query);
     if (!order) return res.status(404).json({ message: 'Order not found' });
     res.json(order);
   } catch (err) {
@@ -161,8 +165,8 @@ router.get('/:id', auth, async (req, res) => {
   }
 });
 
-// Create order
-router.post('/', auth, async (req, res) => {
+// Create order (Supports both Staff and Customer Self-Ordering via QR)
+router.post('/', optionalAuth, async (req, res) => {
   try {
     const now = new Date();
     // Mark all initial items as freshly added in batch 1
@@ -175,16 +179,30 @@ router.post('/', auth, async (req, res) => {
     }));
 
     const isTakeaway = req.body.orderType === 'takeaway';
+    let tableId = req.body.tableId;
+
+    // If customer ordered via Table QR and tableNumber is given without tableId
+    if (!isTakeaway && !tableId && req.body.tableNumber) {
+      const table = await Table.findOne({
+        tableNumber: parseInt(req.body.tableNumber, 10),
+        restaurantId: req.restaurantId
+      });
+      if (table) tableId = table._id;
+    }
+
     const orderData = {
       ...req.body,
       orderType: isTakeaway ? 'takeaway' : 'dine_in',
-      customerName: req.body.customerName || (isTakeaway ? 'Parcel Customer' : ''),
+      customerName: req.body.customerName || (isTakeaway ? 'Parcel Customer' : 'Table Customer'),
       customerPhone: req.body.customerPhone || '',
+      customerId: req.body.customerId || undefined,
       takeawayToken: req.body.takeawayToken || '',
       items,
+      tableId: isTakeaway ? undefined : tableId,
+      tableNumber: isTakeaway ? undefined : (req.body.tableNumber ? parseInt(req.body.tableNumber, 10) : undefined),
       restaurantId: req.restaurantId,
-      waiterId: req.user._id,
-      waiterName: req.user.name,
+      waiterId: req.user?._id || undefined,
+      waiterName: req.user?.name || (req.body.customerName ? `Self (${req.body.customerName})` : 'QR Table Order'),
       batchCount: 1           // track total batches so far
     };
 
@@ -196,20 +214,34 @@ router.post('/', auth, async (req, res) => {
     const order = new Order(orderData);
     await order.save();
 
-    if (!isTakeaway && req.body.tableId) {
+    // If customer ID provided, attach to customer's active orders
+    if (req.body.customerId) {
+      await Customer.findByIdAndUpdate(req.body.customerId, {
+        $addToSet: { orders: order._id },
+        activeTable: req.body.tableNumber ? parseInt(req.body.tableNumber, 10) : null
+      });
+    }
+
+    // Occupy table for dine-in orders
+    if (!isTakeaway && tableId) {
       await Table.findOneAndUpdate(
-        { _id: req.body.tableId, restaurantId: req.restaurantId },
+        { _id: tableId },
         { status: 'occupied', currentOrderId: order._id, customerCount: req.body.customerCount || 1 }
       );
     }
 
     const io = req.app.get('io');
-    const room = `restaurant-${req.restaurantId}`;
-    io.to(`kitchen-${req.restaurantId}`).emit('new-order', order);
-    if (!isTakeaway) {
-      io.to(room).emit('table-updated');
+    if (io) {
+      const room = `restaurant-${req.restaurantId}`;
+      io.to(`kitchen-${req.restaurantId}`).emit('new-order', order);
+      if (!isTakeaway) {
+        io.to(room).emit('table-updated');
+      }
+      io.to(room).emit('order-created', order);
+      if (req.body.customerId) {
+        io.emit(`customer-order-created-${req.body.customerId}`, order);
+      }
     }
-    io.to(room).emit('order-created', order);
 
     res.status(201).json(order);
   } catch (err) {

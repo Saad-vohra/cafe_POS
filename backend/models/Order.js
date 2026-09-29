@@ -73,6 +73,12 @@ const orderSchema = new mongoose.Schema({
   tableNumber: { type: Number, required: false },
   customerName: { type: String, default: '' },
   customerPhone: { type: String, default: '' },
+  customerId: { type: mongoose.Schema.Types.ObjectId, ref: 'Customer' },
+  appliedReward: {
+    rewardId: { type: String },
+    title: { type: String },
+    discountAmount: { type: Number, default: 0 }
+  },
   takeawayToken: { type: String, default: '' },
   waiterId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
   waiterName: { type: String },

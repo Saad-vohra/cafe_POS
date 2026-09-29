@@ -1,9 +1,9 @@
 const express = require('express');
 const router = express.Router();
 const MenuItem = require('../models/MenuItem');
-const { auth, adminOnly } = require('../middleware/auth');
+const { auth, optionalAuth, adminOnly } = require('../middleware/auth');
 
-router.get('/', auth, async (req, res) => {
+router.get('/', optionalAuth, async (req, res) => {
   try {
     const filter = { restaurantId: req.restaurantId };
     if (req.query.category) filter.category = req.query.category;

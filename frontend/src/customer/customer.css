@@ -1,0 +1,469 @@
+/* ===================================================
+   CUSTOMER APP — GREEN + WHITE MODERN RESTAURANT THEME
+   Primary Color: #087F45 / #0A8F4D
+   Mobile-First Restaurant Experience
+   =================================================== */
+
+:root {
+  --cust-primary: #087F45;
+  --cust-primary-dark: #055C31;
+  --cust-primary-light: #EBF7EE;
+  --cust-primary-ultralight: #F4FAF5;
+  --cust-accent: #0A8F4D;
+  --cust-gold: #F59E0B;
+  --cust-gold-light: #FEF3C7;
+  --cust-text-dark: #1A2E22;
+  --cust-text-muted: #5A6E62;
+  --cust-border: #DCE8E0;
+  --cust-card-bg: #FFFFFF;
+  --cust-body-bg: #F5F9F6;
+  --cust-danger: #E53E3E;
+  --cust-shadow-sm: 0 2px 8px rgba(8, 127, 69, 0.06);
+  --cust-shadow-md: 0 6px 20px rgba(8, 127, 69, 0.10);
+  --cust-shadow-lg: 0 12px 32px rgba(8, 127, 69, 0.14);
+  --cust-radius-lg: 20px;
+  --cust-radius-md: 14px;
+  --cust-radius-sm: 8px;
+}
+
+/* Base Customer Container */
+.customer-viewport {
+  min-height: 100vh;
+  background: var(--cust-body-bg);
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  color: var(--cust-text-dark);
+}
+
+.customer-mobile-container {
+  width: 100%;
+  max-width: 480px;
+  min-height: 100vh;
+  background: #FFFFFF;
+  box-shadow: 0 0 40px rgba(0, 0, 0, 0.08);
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  overflow-x: hidden;
+  padding-bottom: 84px; /* Space for bottom navigation */
+}
+
+/* Header */
+.cust-header {
+  position: sticky;
+  top: 0;
+  z-index: 40;
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(10px);
+  border-bottom: 1px solid var(--cust-border);
+  padding: 14px 18px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.cust-header-user {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.cust-avatar {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--cust-primary) 0%, var(--cust-primary-dark) 100%);
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 15px;
+  box-shadow: var(--cust-shadow-sm);
+}
+
+.cust-table-badge {
+  background: var(--cust-primary-light);
+  color: var(--cust-primary-dark);
+  border: 1.5px solid #C7E3D0;
+  font-weight: 700;
+  font-size: 12px;
+  padding: 4px 10px;
+  border-radius: 20px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+/* Hero Section */
+.cust-hero {
+  background: linear-gradient(135deg, var(--cust-primary) 0%, #055C31 100%);
+  color: white;
+  padding: 24px 20px;
+  border-radius: 0 0 var(--cust-radius-lg) var(--cust-radius-lg);
+  box-shadow: var(--cust-shadow-md);
+  position: relative;
+  overflow: hidden;
+}
+
+.cust-hero::after {
+  content: '';
+  position: absolute;
+  right: -20px;
+  bottom: -30px;
+  width: 140px;
+  height: 140px;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 50%;
+  pointer-events: none;
+}
+
+.cust-hero h1 {
+  font-family: 'Playfair Display', Georgia, serif;
+  font-size: 1.7rem;
+  font-weight: 800;
+  line-height: 1.25;
+  margin-bottom: 6px;
+  letter-spacing: -0.01em;
+}
+
+.cust-hero p {
+  font-size: 0.88rem;
+  opacity: 0.9;
+  line-height: 1.4;
+}
+
+/* Loyalty Stamp Teaser Card */
+.cust-reward-card {
+  margin: -24px 18px 18px;
+  background: white;
+  border-radius: var(--cust-radius-lg);
+  padding: 18px 20px;
+  box-shadow: var(--cust-shadow-md);
+  border: 1.5px solid #CBE2D3;
+  position: relative;
+  z-index: 10;
+  cursor: pointer;
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.cust-reward-card:active {
+  transform: scale(0.98);
+}
+
+.stamp-progress-row {
+  display: flex;
+  gap: 8px;
+  margin: 14px 0 10px;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.stamp-bubble {
+  flex: 1;
+  height: 38px;
+  border-radius: 10px;
+  border: 2px dashed #B8D8C3;
+  background: #F8FAF8;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  font-weight: 700;
+  color: #7D9686;
+  transition: all 0.25s;
+}
+
+.stamp-bubble.filled {
+  border: 2px solid var(--cust-primary);
+  background: var(--cust-primary-light);
+  color: var(--cust-primary);
+  box-shadow: 0 2px 6px rgba(8, 127, 69, 0.15);
+}
+
+.stamp-bubble.milestone {
+  border-color: var(--cust-gold);
+  background: var(--cust-gold-light);
+  color: #B45309;
+}
+
+/* Menu Category Pills */
+.cust-category-bar {
+  display: flex;
+  gap: 8px;
+  padding: 12px 18px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.cust-category-bar::-webkit-scrollbar {
+  display: none;
+}
+
+.cust-cat-pill {
+  padding: 7px 16px;
+  border-radius: 20px;
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  border: 1px solid var(--cust-border);
+  background: white;
+  color: var(--cust-text-muted);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.cust-cat-pill.active {
+  background: var(--cust-primary);
+  color: white;
+  border-color: var(--cust-primary);
+  box-shadow: 0 2px 8px rgba(8, 127, 69, 0.25);
+}
+
+/* Food Item Card */
+.cust-food-card {
+  display: flex;
+  gap: 14px;
+  background: white;
+  border-radius: var(--cust-radius-md);
+  padding: 12px 14px;
+  margin: 0 18px 12px;
+  border: 1px solid var(--cust-border);
+  box-shadow: var(--cust-shadow-sm);
+  align-items: center;
+  transition: transform 0.15s, border-color 0.15s;
+  cursor: pointer;
+}
+
+.cust-food-card:active {
+  transform: scale(0.99);
+}
+
+.cust-food-img {
+  width: 90px;
+  height: 90px;
+  border-radius: 12px;
+  object-fit: cover;
+  background: #EDF3EF;
+  flex-shrink: 0;
+}
+
+.cust-food-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.cust-food-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--cust-text-dark);
+  margin-bottom: 3px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.cust-food-desc {
+  font-size: 12px;
+  color: var(--cust-text-muted);
+  line-height: 1.35;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  margin-bottom: 6px;
+}
+
+.cust-food-price {
+  font-size: 15px;
+  font-weight: 800;
+  color: var(--cust-primary);
+}
+
+.cust-add-btn {
+  background: var(--cust-primary-light);
+  color: var(--cust-primary-dark);
+  border: 1.5px solid #BFE0CB;
+  font-weight: 700;
+  font-size: 13px;
+  padding: 6px 14px;
+  border-radius: 20px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.cust-add-btn:hover {
+  background: var(--cust-primary);
+  color: white;
+  border-color: var(--cust-primary);
+}
+
+/* Floating Cart Pill */
+.cust-cart-pill {
+  position: fixed;
+  bottom: 84px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: calc(100% - 36px);
+  max-width: 444px;
+  background: linear-gradient(135deg, var(--cust-primary) 0%, var(--cust-primary-dark) 100%);
+  color: white;
+  padding: 14px 20px;
+  border-radius: 30px;
+  box-shadow: 0 10px 25px rgba(8, 127, 69, 0.35);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  z-index: 50;
+  cursor: pointer;
+  animation: slideUpCart 0.3s ease;
+}
+
+@keyframes slideUpCart {
+  from {
+    transform: translate(-50%, 40px);
+    opacity: 0;
+  }
+  to {
+    transform: translate(-50%, 0);
+    opacity: 1;
+  }
+}
+
+/* Bottom Navigation Bar */
+.cust-bottom-nav {
+  position: fixed;
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 100%;
+  max-width: 480px;
+  background: white;
+  border-top: 1px solid var(--cust-border);
+  display: flex;
+  justify-content: space-around;
+  padding: 8px 0 10px;
+  z-index: 60;
+  box-shadow: 0 -4px 16px rgba(0, 0, 0, 0.04);
+}
+
+.cust-nav-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  background: none;
+  border: none;
+  color: #718096;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 4px 12px;
+  transition: all 0.2s;
+}
+
+.cust-nav-item.active {
+  color: var(--cust-primary);
+}
+
+.cust-nav-item .icon {
+  font-size: 20px;
+}
+
+/* Dish Special Note Styling */
+.cust-dish-note-box {
+  background: #F4FAF5;
+  border: 1px dashed #A8D5B8;
+  border-radius: 8px;
+  padding: 8px 12px;
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--cust-primary-dark);
+}
+
+.cust-dish-note-input {
+  width: 100%;
+  border: 1.5px solid #CBD5E0;
+  border-radius: 8px;
+  padding: 8px 12px;
+  font-size: 13px;
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+.cust-dish-note-input:focus {
+  border-color: var(--cust-primary);
+  box-shadow: 0 0 0 3px rgba(8, 127, 69, 0.12);
+}
+
+/* Modal Backdrop & Drawer */
+.cust-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(4px);
+  z-index: 100;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+}
+
+.cust-modal-sheet {
+  width: 100%;
+  max-width: 480px;
+  background: white;
+  border-radius: 24px 24px 0 0;
+  max-height: 90vh;
+  overflow-y: auto;
+  padding: 20px 20px 32px;
+  position: relative;
+  animation: sheetUp 0.28s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes sheetUp {
+  from {
+    transform: translateY(100%);
+  }
+  to {
+    transform: translateY(0);
+  }
+}
+
+/* Stamp Card Grid in Rewards Page */
+.cust-stamp-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+  margin: 18px 0;
+}
+
+.cust-stamp-slot {
+  aspect-ratio: 1;
+  background: #F6FAF7;
+  border: 2px dashed #C0DCC8;
+  border-radius: 14px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  transition: all 0.2s;
+}
+
+.cust-stamp-slot.stamped {
+  background: linear-gradient(135deg, #EBF7EE 0%, #D8F2DF 100%);
+  border: 2px solid var(--cust-primary);
+  box-shadow: 0 4px 10px rgba(8, 127, 69, 0.15);
+}
+
+.cust-stamp-slot.milestone {
+  border-color: var(--cust-gold);
+  background: #FFFBEB;
+}
+
+.cust-stamp-slot.milestone.stamped {
+  background: linear-gradient(135deg, #FEF3C7 0%, #FDE68A 100%);
+  border: 2px solid var(--cust-gold);
+}

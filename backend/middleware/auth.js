@@ -26,14 +26,41 @@ const auth = async (req, res, next) => {
   }
 };
 
+const optionalAuth = async (req, res, next) => {
+  try {
+    const token = req.header('Authorization')?.replace('Bearer ', '');
+    if (token) {
+      const decoded = jwt.verify(token, process.env.JWT_SECRET);
+      const user = await User.findById(decoded.id).select('-password');
+      if (user && user.active) {
+        req.user = user;
+        req.restaurantId = user.restaurantId;
+      }
+    }
+    // If not authenticated via token, resolve default active restaurant
+    if (!req.restaurantId) {
+      const restaurant = await Restaurant.findOne({ active: true });
+      if (restaurant) {
+        req.restaurantId = restaurant._id;
+        req.restaurant = restaurant;
+      }
+    }
+    next();
+  } catch (err) {
+    // Continue without user if token expired or invalid
+    next();
+  }
+};
+
 const adminOnly = (req, res, next) => {
-  if (req.user.role !== 'admin') return res.status(403).json({ message: 'Admin access required' });
+  if (req.user?.role !== 'admin') return res.status(403).json({ message: 'Admin access required' });
   next();
 };
 
 const notKitchen = (req, res, next) => {
-  if (req.user.role === 'kitchen') return res.status(403).json({ message: 'Not authorized' });
+  if (req.user?.role === 'kitchen') return res.status(403).json({ message: 'Not authorized' });
   next();
 };
 
-module.exports = { auth, adminOnly, notKitchen };
+module.exports = { auth, optionalAuth, adminOnly, notKitchen };
+

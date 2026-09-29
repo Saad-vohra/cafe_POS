@@ -8,6 +8,21 @@ import WaiterLayout from './pages/waiter/WaiterLayout';
 import KitchenLayout from './pages/kitchen/KitchenLayout';
 import './index.css';
 
+// Customer Ordering & Loyalty App
+import { CustomerProvider } from './customer/CustomerContext';
+import CustomerLogin from './customer/CustomerLogin';
+import CustomerLayout from './customer/CustomerLayout';
+import CustomerHome from './customer/CustomerHome';
+import CustomerMenu from './customer/CustomerMenu';
+import CustomerCart from './customer/CustomerCart';
+import CustomerOrderStatus from './customer/CustomerOrderStatus';
+import CustomerRewards from './customer/CustomerRewards';
+import CustomerRewardQR from './customer/CustomerRewardQR';
+import CustomerBillPay from './customer/CustomerBillPay';
+import CustomerUPIPay from './customer/CustomerUPIPay';
+import CustomerPaymentSuccess from './customer/CustomerPaymentSuccess';
+import CustomerProfile from './customer/CustomerProfile';
+
 function ProtectedRoute({ children, roles }) {
   const { user, loading } = useAuth();
   if (loading) return <div className="loading-center"><div className="spinner"></div></div>;
@@ -21,6 +36,32 @@ function AppRoutes() {
 
   return (
     <Routes>
+      {/* Customer Mobile Ordering & Loyalty Portal (Table QR Entry) */}
+      <Route
+        path="/customer/*"
+        element={
+          <CustomerProvider>
+            <Routes>
+              <Route index element={<CustomerLogin />} />
+              <Route element={<CustomerLayout />}>
+                <Route path="home" element={<CustomerHome />} />
+                <Route path="menu" element={<CustomerMenu />} />
+                <Route path="cart" element={<CustomerCart />} />
+                <Route path="order-status" element={<CustomerOrderStatus />} />
+                <Route path="rewards" element={<CustomerRewards />} />
+                <Route path="reward-qr" element={<CustomerRewardQR />} />
+                <Route path="pay" element={<CustomerBillPay />} />
+                <Route path="upi-pay" element={<CustomerUPIPay />} />
+                <Route path="payment-success" element={<CustomerPaymentSuccess />} />
+                <Route path="profile" element={<CustomerProfile />} />
+                <Route path="*" element={<Navigate to="/customer/home" />} />
+              </Route>
+            </Routes>
+          </CustomerProvider>
+        }
+      />
+
+      {/* Staff & Admin Routes */}
       <Route path="/login" element={user ? <Navigate to="/" /> : <Login />} />
       <Route path="/admin/*" element={
         <ProtectedRoute roles={['admin']}>
