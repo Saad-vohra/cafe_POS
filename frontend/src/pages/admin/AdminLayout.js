@@ -8,6 +8,7 @@ import Orders from './Orders';
 import Billing from './Billing';
 import Reports from './Reports';
 import Staff from './Staff';
+import Takeaway from './Takeaway';
 
 export default function AdminLayout() {
   return (
@@ -17,6 +18,7 @@ export default function AdminLayout() {
         <Routes>
           <Route path="dashboard" element={<Dashboard />} />
           <Route path="tables" element={<Tables />} />
+          <Route path="takeaway" element={<Takeaway />} />
           <Route path="menu" element={<Menu />} />
           <Route path="orders" element={<Orders />} />
           <Route path="billing" element={<Billing />} />

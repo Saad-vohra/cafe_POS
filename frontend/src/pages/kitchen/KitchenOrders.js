@@ -324,10 +324,27 @@ function KitchenCard({ order, onStatusChange }) {
       <div style={{ padding: '12px 16px', background: headerStyle.bg, borderBottom: `2px solid ${headerStyle.border}` }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div>
-            <div style={{ fontWeight: 800, fontSize: '1rem', color: headerStyle.text }}>
-              🪑 Table T{order.tableNumber}
+            {order.orderType === 'takeaway' ? (
+              <div style={{ fontWeight: 800, fontSize: '1rem', color: '#6B46C1', display: 'flex', alignItems: 'center', gap: 6 }}>
+                <span>🛍️ PARCEL</span>
+                <span style={{ fontSize: 12, background: '#FAF5FF', border: '1px solid #D6BCFA', padding: '1px 6px', borderRadius: 4 }}>
+                  {order.takeawayToken || `#${order.orderNumber}`}
+                </span>
+              </div>
+            ) : (
+              <div style={{ fontWeight: 800, fontSize: '1rem', color: headerStyle.text }}>
+                🪑 Table T{order.tableNumber}
+              </div>
+            )}
+            <div style={{ fontSize: 12, color: '#718096', marginTop: 2 }}>
+              Order #{order.orderNumber}
+              {order.customerName && <span style={{ marginLeft: 6, fontWeight: 600, color: '#4A5568' }}>• 👤 {order.customerName}</span>}
             </div>
-            <div style={{ fontSize: 12, color: '#718096', marginTop: 2 }}>Order #{order.orderNumber}</div>
+            {order.notes && (
+              <div style={{ fontSize: 11, color: '#C53030', fontWeight: 600, marginTop: 2, background: '#FFF5F5', padding: '2px 6px', borderRadius: 4, display: 'inline-block' }}>
+                📌 {order.notes}
+              </div>
+            )}
           </div>
           <div style={{ textAlign: 'right' }}>
             <div style={{ fontSize: 12, fontWeight: 700, color: isUrgent ? '#e53e3e' : '#718096' }}>

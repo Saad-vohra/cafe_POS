@@ -929,8 +929,9 @@ const printBill = (bill, paymentMode) => {
 
         <div class="info-row"><span>Bill No.</span><strong>#${bill.billNumber}</strong></div>
         <div class="info-row"><span>Order No.</span><span>#${bill.orderNumber}</span></div>
-        <div class="info-row"><span>Table</span><span>T${bill.tableNumber}</span></div>
-        <div class="info-row"><span>Guests</span><span>${bill.customerCount || 1}</span></div>
+        <div class="info-row"><span>${bill.orderType === 'takeaway' ? 'Type' : 'Table'}</span><strong>${bill.orderType === 'takeaway' ? `Parcel (${bill.takeawayToken || `#${bill.orderNumber}`})` : `T${bill.tableNumber}`}</strong></div>
+        ${bill.customerName ? `<div class="info-row"><span>Customer</span><span>${bill.customerName}</span></div>` : ''}
+        ${bill.customerPhone ? `<div class="info-row"><span>Phone</span><span>${bill.customerPhone}</span></div>` : ''}
         <div class="info-row"><span>Payment</span><span class="badge">${mode.toUpperCase()}</span></div>
 
         <hr class="dashed"/>
@@ -981,7 +982,9 @@ export default function Billing() {
 
   const loadOrders = async () => {
     const res = await axios.get('/api/orders?active=true');
-    setOrders(res.data.filter(o => ['ready', 'served', 'preparing', 'accepted'].includes(o.status)));
+    setOrders(res.data.filter(o =>
+      o.orderType === 'takeaway' || ['ready', 'served', 'preparing', 'accepted', 'pending'].includes(o.status)
+    ));
   };
 
   const loadBills = async () => {
@@ -1036,7 +1039,7 @@ export default function Billing() {
             {/* Left: Select order + payment */}
             <div>
               <div className="card mb-16">
-                <h3 style={{ fontFamily: 'Inter', fontWeight: 700, fontSize: '1rem', marginBottom: 16 }}>Select Table / Order</h3>
+                <h3 style={{ fontFamily: 'Inter', fontWeight: 700, fontSize: '1rem', marginBottom: 16 }}>Select Order / Parcel</h3>
                 {orders.length === 0 ? (
                   <div className="empty-state" style={{ padding: 30 }}>
                     <div className="icon">📋</div>
@@ -1044,22 +1047,38 @@ export default function Billing() {
                   </div>
                 ) : (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                    {orders.map(o => (
-                      <div key={o._id} onClick={() => handleSelectOrder(o)}
-                        style={{
-                          padding: 14, borderRadius: 8,
-                          border: `2px solid ${selectedOrder?._id === o._id ? '#FF6B35' : '#E2E8F0'}`,
-                          cursor: 'pointer',
-                          background: selectedOrder?._id === o._id ? '#fff3ee' : 'white',
-                          transition: 'all 0.2s'
-                        }}>
-                        <div className="flex-between">
-                          <strong>Order #{o.orderNumber} — Table T{o.tableNumber}</strong>
-                          <span className="badge badge-orange">₹{o.totalAmount}</span>
+                    {orders.map(o => {
+                      const isTakeaway = o.orderType === 'takeaway';
+                      const isSelected = selectedOrder?._id === o._id;
+                      return (
+                        <div key={o._id} onClick={() => handleSelectOrder(o)}
+                          style={{
+                            padding: 14, borderRadius: 8,
+                            border: `2px solid ${isSelected ? (isTakeaway ? '#805ad5' : '#FF6B35') : '#E2E8F0'}`,
+                            cursor: 'pointer',
+                            background: isSelected ? (isTakeaway ? '#FAF5FF' : '#fff3ee') : 'white',
+                            transition: 'all 0.2s'
+                          }}>
+                          <div className="flex-between">
+                            <strong>
+                              {isTakeaway ? (
+                                <span style={{ color: '#553C9A', display: 'flex', alignItems: 'center', gap: 6 }}>
+                                  🛍️ Parcel {o.takeawayToken ? `(${o.takeawayToken})` : `#${o.orderNumber}`}
+                                  {o.customerName && <span style={{ color: '#4A5568', fontWeight: 600 }}>• {o.customerName}</span>}
+                                </span>
+                              ) : (
+                                `Order #${o.orderNumber} — Table T${o.tableNumber}`
+                              )}
+                            </strong>
+                            <span className="badge badge-orange">₹{o.totalAmount}</span>
+                          </div>
+                          <div className="text-sm text-muted" style={{ marginTop: 4 }}>
+                            {o.items.length} items • <span style={{ textTransform: 'capitalize' }}>{o.status}</span>
+                            {isTakeaway && o.customerPhone && ` • 📞 ${o.customerPhone}`}
+                          </div>
                         </div>
-                        <div className="text-sm text-muted" style={{ marginTop: 4 }}>{o.items.length} items • {o.status}</div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
               </div>
@@ -1134,7 +1153,16 @@ export default function Billing() {
                   <div style={{ marginBottom: 14 }}>
                     <div className="bill-row"><span className="text-muted">Bill #</span><strong>{billPreview?.billNumber || '----'}</strong></div>
                     <div className="bill-row"><span className="text-muted">Order #</span><span>{selectedOrder?.orderNumber}</span></div>
-                    <div className="bill-row"><span className="text-muted">Table</span><span>T{selectedOrder?.tableNumber}</span></div>
+                    <div className="bill-row">
+                      <span className="text-muted">{selectedOrder?.orderType === 'takeaway' ? 'Type' : 'Table'}</span>
+                      <span>{selectedOrder?.orderType === 'takeaway' ? `🛍️ Parcel (${selectedOrder?.takeawayToken || `#${selectedOrder?.orderNumber}`})` : `T${selectedOrder?.tableNumber}`}</span>
+                    </div>
+                    {selectedOrder?.customerName && (
+                      <div className="bill-row">
+                        <span className="text-muted">Customer</span>
+                        <span>{selectedOrder?.customerName}</span>
+                      </div>
+                    )}
                     <div className="bill-row"><span className="text-muted">Payment</span><span style={{ textTransform: 'uppercase', fontWeight: 600 }}>{paymentMode}</span></div>
                   </div>
                   <hr style={{ borderColor: '#E2E8F0', borderStyle: 'dashed', margin: '14px 0' }} />
@@ -1182,7 +1210,8 @@ export default function Billing() {
                 <tr>
                   <th>BILL #</th>
                   <th>ORDER #</th>
-                  <th>TABLE</th>
+                  <th>TYPE / TABLE</th>
+                  <th>CUSTOMER</th>
                   <th>SUBTOTAL</th>
                   <th>GST</th>
                   <th>TOTAL</th>
@@ -1194,7 +1223,7 @@ export default function Billing() {
               <tbody>
                 {bills.length === 0 && (
                   <tr>
-                    <td colSpan={9} className="text-center text-muted" style={{ padding: 40 }}>
+                    <td colSpan={10} className="text-center text-muted" style={{ padding: 40 }}>
                       No bills found
                     </td>
                   </tr>
@@ -1203,7 +1232,27 @@ export default function Billing() {
                   <tr key={b._id}>
                     <td><strong>#{b.billNumber}</strong></td>
                     <td>#{b.orderNumber}</td>
-                    <td>T{b.tableNumber}</td>
+                    <td>
+                      {b.orderType === 'takeaway' ? (
+                        <span className="badge" style={{ background: '#FAF5FF', color: '#6B46C1', border: '1px solid #D6BCFA', fontWeight: 700 }}>
+                          🛍️ Parcel {b.takeawayToken ? `(${b.takeawayToken})` : ''}
+                        </span>
+                      ) : (
+                        <span className="badge" style={{ background: '#EBF8FF', color: '#2B6CB0', border: '1px solid #BEE3F8' }}>
+                          🪑 T{b.tableNumber}
+                        </span>
+                      )}
+                    </td>
+                    <td className="text-sm">
+                      {b.customerName ? (
+                        <div>
+                          <strong>{b.customerName}</strong>
+                          {b.customerPhone && <div style={{ fontSize: 11, color: '#718096' }}>{b.customerPhone}</div>}
+                        </div>
+                      ) : (
+                        <span className="text-muted">-</span>
+                      )}
+                    </td>
                     <td>₹{b.subtotal}</td>
                     <td>₹{b.gstAmount}</td>
                     <td><strong style={{ color: '#FF6B35' }}>₹{b.totalAmount}</strong></td>
@@ -1246,7 +1295,8 @@ export default function Billing() {
                               `Date  : ${new Date(b.createdAt).toLocaleString('en-IN')}`,
                               `Bill# : #${b.billNumber}`,
                               `Order#: #${b.orderNumber}`,
-                              `Table : T${b.tableNumber}`,
+                              `Type  : ${b.orderType === 'takeaway' ? `Parcel (${b.takeawayToken || `#${b.orderNumber}`})` : `Table T${b.tableNumber}`}`,
+                              ...(b.customerName ? [`Cust  : ${b.customerName}`] : []),
                               `Pay   : ${(b.paymentMode || '').toUpperCase()}`,
                               '--------------------------------',
                               'ITEM                  QTY  AMT',
@@ -1269,7 +1319,7 @@ export default function Billing() {
                             const url = URL.createObjectURL(blob);
                             const a = document.createElement('a');
                             a.href = url;
-                            a.download = `Bill_${b.billNumber}_T${b.tableNumber}.txt`;
+                            a.download = `Bill_${b.billNumber}_${b.orderType === 'takeaway' ? 'Takeaway' : `T${b.tableNumber}`}.txt`;
                             a.click();
                             URL.revokeObjectURL(url);
                             toast.success(`Bill #${b.billNumber} downloaded`);

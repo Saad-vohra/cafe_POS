@@ -2,6 +2,8 @@ import React, { useEffect, useState } from 'react';
 import axios from 'axios';
 import toast from 'react-hot-toast';
 
+import { useNavigate } from 'react-router-dom';
+
 const STATUS_FLOW = ['pending', 'accepted', 'preparing', 'ready', 'served', 'completed'];
 const STATUS_COLORS = {
   pending: 'badge-orange', accepted: 'badge-blue', preparing: 'badge-purple',
@@ -9,8 +11,10 @@ const STATUS_COLORS = {
 };
 
 export default function Orders() {
+  const navigate = useNavigate();
   const [orders, setOrders] = useState([]);
   const [filter, setFilter] = useState('active');
+  const [typeFilter, setTypeFilter] = useState('all'); // 'all' | 'dine_in' | 'takeaway'
   const [selected, setSelected] = useState(null);
 
   const load = async () => {
@@ -36,36 +40,115 @@ export default function Orders() {
     setSelected(null);
   };
 
+  const displayedOrders = orders.filter(o => {
+    if (typeFilter === 'takeaway') return o.orderType === 'takeaway';
+    if (typeFilter === 'dine_in') return o.orderType !== 'takeaway';
+    return true;
+  });
+
   return (
     <div>
       <div className="page-header">
-        <h1>Orders</h1>
+        <div>
+          <h1>Orders</h1>
+          <p className="text-muted text-sm" style={{ marginTop: 2 }}>Manage dine-in tables and takeaway parcel orders</p>
+        </div>
         <div className="flex-gap">
-          {['active', 'pending', 'preparing', 'ready', 'completed', 'all'].map(f => (
-            <button key={f} className={`btn btn-sm ${filter === f ? 'btn-primary' : 'btn-ghost'}`}
-              onClick={() => setFilter(f)} style={{ textTransform: 'capitalize' }}>{f}</button>
-          ))}
+          <button
+            className="btn btn-primary btn-sm"
+            onClick={() => navigate('/admin/takeaway')}
+            style={{ fontWeight: 700, display: 'flex', alignItems: 'center', gap: 6 }}
+          >
+            🛍️ New Takeaway Order
+          </button>
         </div>
       </div>
+
       <div className="page-body">
+        {/* Filter Toolbar */}
+        <div className="card mb-16" style={{ padding: '12px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
+          {/* Status Filters */}
+          <div className="flex-gap" style={{ flexWrap: 'wrap' }}>
+            <span style={{ fontSize: 12, fontWeight: 700, color: '#718096', marginRight: 4 }}>Status:</span>
+            {['active', 'pending', 'preparing', 'ready', 'completed', 'all'].map(f => (
+              <button key={f} className={`btn btn-sm ${filter === f ? 'btn-primary' : 'btn-ghost'}`}
+                onClick={() => setFilter(f)} style={{ textTransform: 'capitalize' }}>{f}</button>
+            ))}
+          </div>
+
+          {/* Type Filters */}
+          <div className="flex-gap">
+            <span style={{ fontSize: 12, fontWeight: 700, color: '#718096', marginRight: 4 }}>Type:</span>
+            <button
+              className={`btn btn-sm ${typeFilter === 'all' ? 'btn-secondary' : 'btn-ghost'}`}
+              onClick={() => setTypeFilter('all')}
+              style={{ background: typeFilter === 'all' ? '#2D3748' : '', color: typeFilter === 'all' ? 'white' : '' }}
+            >
+              All Types
+            </button>
+            <button
+              className={`btn btn-sm ${typeFilter === 'dine_in' ? 'btn-secondary' : 'btn-ghost'}`}
+              onClick={() => setTypeFilter('dine_in')}
+              style={{ background: typeFilter === 'dine_in' ? '#2B6CB0' : '', color: typeFilter === 'dine_in' ? 'white' : '' }}
+            >
+              🪑 Dine-In
+            </button>
+            <button
+              className={`btn btn-sm ${typeFilter === 'takeaway' ? 'btn-secondary' : 'btn-ghost'}`}
+              onClick={() => setTypeFilter('takeaway')}
+              style={{ background: typeFilter === 'takeaway' ? '#6B46C1' : '', color: typeFilter === 'takeaway' ? 'white' : '' }}
+            >
+              🛍️ Takeaway
+            </button>
+          </div>
+        </div>
+
         <div style={{ display: 'grid', gridTemplateColumns: selected ? '1fr 380px' : '1fr', gap: 20 }}>
           <div className="table-wrapper">
             <table>
               <thead>
-                <tr><th>Order #</th><th>Table</th><th>Items</th><th>Amount</th><th>Waiter</th><th>Status</th><th>Time</th><th>Action</th></tr>
+                <tr>
+                  <th>Order #</th>
+                  <th>Order Type / Table</th>
+                  <th>Customer</th>
+                  <th>Items</th>
+                  <th>Amount</th>
+                  <th>Status</th>
+                  <th>Time</th>
+                  <th>Action</th>
+                </tr>
               </thead>
               <tbody>
-                {orders.length === 0 && (
+                {displayedOrders.length === 0 && (
                   <tr><td colSpan={8} className="text-center text-muted" style={{ padding: 40 }}>No orders found</td></tr>
                 )}
-                {orders.map(o => (
+                {displayedOrders.map(o => (
                   <tr key={o._id} onClick={() => setSelected(selected?._id === o._id ? null : o)}
                     style={{ cursor: 'pointer', background: selected?._id === o._id ? '#fff3ee' : '' }}>
                     <td><strong>#{o.orderNumber}</strong></td>
-                    <td>T{o.tableNumber}</td>
+                    <td>
+                      {o.orderType === 'takeaway' ? (
+                        <span className="badge" style={{ background: '#FAF5FF', color: '#6B46C1', border: '1px solid #D6BCFA', fontWeight: 700 }}>
+                          🛍️ Parcel {o.takeawayToken ? `(${o.takeawayToken})` : ''}
+                        </span>
+                      ) : (
+                        <span className="badge" style={{ background: '#EBF8FF', color: '#2B6CB0', border: '1px solid #BEE3F8', fontWeight: 600 }}>
+                          🪑 Table T{o.tableNumber}
+                        </span>
+                      )}
+                    </td>
+                    <td className="text-sm">
+                      {o.customerName ? (
+                        <div>
+                          <strong>{o.customerName}</strong>
+                          {o.customerPhone && <div style={{ fontSize: 11, color: '#718096' }}>{o.customerPhone}</div>}
+                        </div>
+                      ) : (
+                        <span className="text-muted">-</span>
+                      )}
+                    </td>
                     <td>{o.items.length} items</td>
                     <td><strong>₹{o.totalAmount}</strong></td>
-                    <td className="text-sm">{o.waiterName || '-'}</td>
                     <td><span className={`badge ${STATUS_COLORS[o.status]}`}>{o.status}</span></td>
                     <td className="text-sm text-muted">{new Date(o.createdAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}</td>
                     <td onClick={e => e.stopPropagation()}>
@@ -95,17 +178,29 @@ export default function Orders() {
               </div>
               <div className="text-sm" style={{ marginBottom: 14 }}>
                 <div className="flex-between" style={{ marginBottom: 6 }}>
-                  <span className="text-muted">Table</span><strong>T{selected.tableNumber}</strong>
+                  <span className="text-muted">{selected.orderType === 'takeaway' ? 'Order Type' : 'Table'}</span>
+                  <strong>{selected.orderType === 'takeaway' ? `🛍️ Takeaway / Parcel (${selected.takeawayToken || `#${selected.orderNumber}`})` : `T${selected.tableNumber}`}</strong>
                 </div>
+                {selected.customerName && (
+                  <div className="flex-between" style={{ marginBottom: 6 }}>
+                    <span className="text-muted">Customer</span>
+                    <strong>{selected.customerName} {selected.customerPhone ? `(${selected.customerPhone})` : ''}</strong>
+                  </div>
+                )}
+                {selected.notes && (
+                  <div style={{ background: '#FFF5F5', padding: '6px 10px', borderRadius: 6, border: '1px solid #FEB2B2', fontSize: 12, color: '#C53030', marginBottom: 8 }}>
+                    📌 Note: {selected.notes}
+                  </div>
+                )}
                 <div className="flex-between" style={{ marginBottom: 6 }}>
                   <span className="text-muted">Status</span>
                   <span className={`badge ${STATUS_COLORS[selected.status]}`}>{selected.status}</span>
                 </div>
                 <div className="flex-between" style={{ marginBottom: 6 }}>
-                  <span className="text-muted">Waiter</span><span>{selected.waiterName || '-'}</span>
+                  <span className="text-muted">Placed By</span><span>{selected.waiterName || 'Admin'}</span>
                 </div>
                 <div className="flex-between">
-                  <span className="text-muted">Customers</span><span>{selected.customerCount}</span>
+                  <span className="text-muted">Time</span><span>{new Date(selected.createdAt).toLocaleTimeString('en-IN')}</span>
                 </div>
               </div>
               <hr style={{ margin: '14px 0', borderColor: '#E2E8F0' }} />
@@ -122,9 +217,19 @@ export default function Orders() {
                 ))}
               </div>
               <hr style={{ margin: '14px 0', borderColor: '#E2E8F0' }} />
-              <div className="flex-between font-bold">
+              <div className="flex-between font-bold" style={{ marginBottom: 16 }}>
                 <span>Total</span><span style={{ color: '#FF6B35', fontSize: '1.1rem' }}>₹{selected.totalAmount}</span>
               </div>
+
+              {!['completed', 'cancelled'].includes(selected.status) && (
+                <button
+                  className="btn btn-success w-full"
+                  onClick={() => navigate('/admin/billing')}
+                  style={{ fontWeight: 700 }}
+                >
+                  💳 Proceed to Billing
+                </button>
+              )}
             </div>
           )}
         </div>

@@ -273,7 +273,8 @@ export default function WaiterBilling() {
 
           <div class="bill-row"><span>Bill #</span><strong>${bill.billNumber}</strong></div>
           <div class="bill-row"><span>Order #</span><span>${bill.orderNumber}</span></div>
-          <div class="bill-row"><span>Table</span><span>T${bill.tableNumber}</span></div>
+          <div class="bill-row"><span>${bill.orderType === 'takeaway' ? 'Type' : 'Table'}</span><strong>${bill.orderType === 'takeaway' ? `Parcel (${bill.takeawayToken || `#${bill.orderNumber}`})` : `T${bill.tableNumber}`}</strong></div>
+          ${bill.customerName ? `<div class="bill-row"><span>Customer</span><span>${bill.customerName}</span></div>` : ''}
           <div class="bill-row"><span>Payment</span><span style="font-weight:700;text-transform:uppercase">${bill.paymentMode}</span></div>
 
           <hr/>
@@ -339,7 +340,13 @@ export default function WaiterBilling() {
             <div style={{ marginBottom: 14 }}>
               <div className="bill-row"><span className="text-muted">Bill #</span><strong>#{billDone.billNumber}</strong></div>
               <div className="bill-row"><span className="text-muted">Order #</span><span>#{billDone.orderNumber}</span></div>
-              <div className="bill-row"><span className="text-muted">Table</span><span>T{billDone.tableNumber}</span></div>
+              <div className="bill-row">
+                <span className="text-muted">{billDone.orderType === 'takeaway' ? 'Type' : 'Table'}</span>
+                <span>{billDone.orderType === 'takeaway' ? `🛍️ Parcel (${billDone.takeawayToken || `#${billDone.orderNumber}`})` : `T${billDone.tableNumber}`}</span>
+              </div>
+              {billDone.customerName && (
+                <div className="bill-row"><span className="text-muted">Customer</span><span>{billDone.customerName}</span></div>
+              )}
               <div className="bill-row"><span className="text-muted">Payment</span>
                 <span style={{ textTransform: 'uppercase', fontWeight: 600 }}>
                   {billDone.paymentMode === 'cash' ? '💵' : billDone.paymentMode === 'upi' ? '📱' : '💳'} {billDone.paymentMode}
@@ -401,7 +408,12 @@ export default function WaiterBilling() {
                     }}>
                     <div className="flex-between">
                       <div>
-                        <strong>Order #{o.orderNumber} — Table T{o.tableNumber}</strong>
+                        <strong>
+                          {o.orderType === 'takeaway'
+                            ? `🛍️ Parcel ${o.takeawayToken ? `(${o.takeawayToken})` : `#${o.orderNumber}`} — ${o.customerName || 'Customer'}`
+                            : `Order #${o.orderNumber} — Table T${o.tableNumber}`
+                          }
+                        </strong>
                         <div className="text-sm text-muted" style={{ marginTop: 4 }}>{o.items.length} items</div>
                       </div>
                       <div style={{ textAlign: 'right' }}>

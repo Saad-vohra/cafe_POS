@@ -262,7 +262,7 @@ export default function WaiterOrders() {
                   <div key={o._id} className="wo-ready-row">
                     <div className="wo-ready-info">
                       <span className="wo-order-num">#{o.orderNumber}</span>
-                      <span className="wo-table-chip">T{o.tableNumber}</span>
+                      <span className="wo-table-chip">{o.orderType === 'takeaway' ? '🛍️ Parcel' : `T${o.tableNumber}`}</span>
                       <span className="text-sm text-muted">{o.items.length} items · ₹{o.totalAmount}</span>
                     </div>
                     <button className="btn btn-success wo-serve-btn" onClick={() => markServed(o._id)}>
@@ -291,7 +291,7 @@ export default function WaiterOrders() {
                     <div className="wo-card-top">
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                         <span className="wo-order-num">#{o.orderNumber}</span>
-                        <span className="wo-table-chip">T{o.tableNumber}</span>
+                        <span className="wo-table-chip">{o.orderType === 'takeaway' ? `🛍️ Parcel ${o.takeawayToken ? `(${o.takeawayToken})` : ''}` : `T${o.tableNumber}`}</span>
                       </div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                         <span className={`badge ${STATUS_COLORS[o.status]}`}>

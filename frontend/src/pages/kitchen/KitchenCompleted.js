@@ -29,9 +29,17 @@ export default function KitchenCompleted() {
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 14 }}>
             {orders.map(o => (
               <div key={o._id} style={{ background: 'white', borderRadius: 10, padding: 16, border: '1.5px solid #E2E8F0', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 10 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
                   <strong style={{ fontSize: 14 }}>Order #{o.orderNumber}</strong>
-                  <span style={{ fontSize: 12, color: '#718096' }}>T{o.tableNumber}</span>
+                  <span style={{ fontSize: 12, color: '#718096' }}>
+                    {o.orderType === 'takeaway' ? (
+                      <span className="badge" style={{ background: '#FAF5FF', color: '#6B46C1', border: '1px solid #D6BCFA', fontSize: 11, fontWeight: 700 }}>
+                        🛍️ Parcel {o.takeawayToken ? `(${o.takeawayToken})` : ''}
+                      </span>
+                    ) : (
+                      `T${o.tableNumber}`
+                    )}
+                  </span>
                 </div>
                 {o.items.map((item, i) => (
                   <div key={i} style={{ fontSize: 13, color: '#4a5568', marginBottom: 4, display: 'flex', justifyContent: 'space-between' }}>

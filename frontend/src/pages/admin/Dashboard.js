@@ -2,7 +2,10 @@ import React, { useEffect, useState } from 'react';
 import axios from 'axios';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 
+import { useNavigate } from 'react-router-dom';
+
 export default function Dashboard() {
+  const navigate = useNavigate();
   const [stats, setStats] = useState(null);
   const [tables, setTables] = useState([]);
   const [recentOrders, setRecentOrders] = useState([]);
@@ -46,8 +49,17 @@ export default function Dashboard() {
   return (
     <div>
       <div className="page-header">
-        <h1>Dashboard</h1>
-        <span className="text-sm text-muted">📅 {new Date().toLocaleDateString('en-IN', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</span>
+        <div>
+          <h1>Dashboard</h1>
+          <span className="text-sm text-muted">📅 {new Date().toLocaleDateString('en-IN', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</span>
+        </div>
+        <button
+          className="btn btn-primary btn-sm"
+          onClick={() => navigate('/admin/takeaway')}
+          style={{ fontWeight: 700, display: 'flex', alignItems: 'center', gap: 6 }}
+        >
+          🛍️ Takeaway Order
+        </button>
       </div>
       <div className="page-body">
         {/* Stats */}
@@ -143,7 +155,15 @@ export default function Dashboard() {
                   {recentOrders.map(o => (
                     <tr key={o._id}>
                       <td><strong>#{o.orderNumber}</strong></td>
-                      <td>Table {o.tableNumber}</td>
+                      <td>
+                        {o.orderType === 'takeaway' ? (
+                          <span className="badge" style={{ background: '#FAF5FF', color: '#6B46C1', border: '1px solid #D6BCFA', fontSize: 11, fontWeight: 700 }}>
+                            🛍️ Parcel {o.takeawayToken ? `(${o.takeawayToken})` : ''}
+                          </span>
+                        ) : (
+                          `Table ${o.tableNumber}`
+                        )}
+                      </td>
                       <td>{o.items.length} items</td>
                       <td><strong>₹{o.totalAmount}</strong></td>
                       <td><span className={`badge ${statusColor[o.status] || 'badge-gray'}`}>{o.status}</span></td>

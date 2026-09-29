@@ -47,7 +47,11 @@ router.post('/', auth, async (req, res) => {
       restaurantId: req.restaurantId,
       orderId: order._id,
       orderNumber: order.orderNumber,
+      orderType: order.orderType || 'dine_in',
       tableNumber: order.tableNumber,
+      customerName: order.customerName || '',
+      customerPhone: order.customerPhone || '',
+      takeawayToken: order.takeawayToken || '',
       items: order.items.map(i => ({
         name: i.name,
         quantity: i.quantity,
@@ -59,21 +63,26 @@ router.post('/', auth, async (req, res) => {
       gstAmount,
       totalAmount,
       paymentMode,
-      customerCount: order.customerCount
+      customerCount: order.customerCount || 1
     });
     await bill.save();
 
     order.status = 'completed';
     await order.save();
 
-    await Table.findOneAndUpdate(
-      { _id: order.tableId, restaurantId: req.restaurantId },
-      { status: 'available', currentOrderId: null, customerCount: 0 }
-    );
+    if (order.tableId) {
+      await Table.findOneAndUpdate(
+        { _id: order.tableId, restaurantId: req.restaurantId },
+        { status: 'available', currentOrderId: null, customerCount: 0 }
+      );
+    }
 
     const io = req.app.get('io');
     const room = `restaurant-${req.restaurantId}`;
-    io.to(room).emit('table-updated');
+    if (order.tableId) {
+      io.to(room).emit('table-updated');
+    }
+    io.to(room).emit('order-status-updated', order);
     io.to(room).emit('bill-created', bill);
 
     res.status(201).json(bill);

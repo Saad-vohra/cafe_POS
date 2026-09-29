@@ -5,7 +5,11 @@ const billSchema = new mongoose.Schema({
   billNumber: { type: Number },
   orderId: { type: mongoose.Schema.Types.ObjectId, ref: 'Order', required: true },
   orderNumber: { type: Number },
-  tableNumber: { type: Number, required: true },
+  orderType: { type: String, enum: ['dine_in', 'takeaway'], default: 'dine_in' },
+  tableNumber: { type: Number, required: false },
+  customerName: { type: String, default: '' },
+  customerPhone: { type: String, default: '' },
+  takeawayToken: { type: String, default: '' },
   items: [{
     name: String,
     quantity: Number,

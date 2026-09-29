@@ -26,6 +26,7 @@ export default function Sidebar({ role }) {
   const adminLinks = [
     { icon: '📊', label: 'Dashboard', path: '/admin/dashboard' },
     { icon: '🪑', label: 'Tables', path: '/admin/tables' },
+    { icon: '🛍️', label: 'Takeaway', path: '/admin/takeaway' },
     { icon: '🍽️', label: 'Menu', path: '/admin/menu' },
     { icon: '📋', label: 'Orders', path: '/admin/orders' },
     { icon: '💳', label: 'Billing', path: '/admin/billing' },

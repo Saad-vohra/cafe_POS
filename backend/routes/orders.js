@@ -139,6 +139,7 @@ router.get('/', auth, async (req, res) => {
     const filter = { restaurantId: req.restaurantId };
     if (req.query.status) filter.status = req.query.status;
     if (req.query.tableNumber) filter.tableNumber = req.query.tableNumber;
+    if (req.query.orderType) filter.orderType = req.query.orderType;
     if (req.query.active === 'true') {
       filter.status = { $nin: ['completed', 'cancelled'] };
     }
@@ -173,25 +174,41 @@ router.post('/', auth, async (req, res) => {
       batchNumber: 1          // first order = batch 1
     }));
 
-    const order = new Order({
+    const isTakeaway = req.body.orderType === 'takeaway';
+    const orderData = {
       ...req.body,
+      orderType: isTakeaway ? 'takeaway' : 'dine_in',
+      customerName: req.body.customerName || (isTakeaway ? 'Parcel Customer' : ''),
+      customerPhone: req.body.customerPhone || '',
+      takeawayToken: req.body.takeawayToken || '',
       items,
       restaurantId: req.restaurantId,
       waiterId: req.user._id,
       waiterName: req.user.name,
       batchCount: 1           // track total batches so far
-    });
+    };
+
+    if (isTakeaway) {
+      delete orderData.tableId;
+      delete orderData.tableNumber;
+    }
+
+    const order = new Order(orderData);
     await order.save();
 
-    await Table.findOneAndUpdate(
-      { _id: req.body.tableId, restaurantId: req.restaurantId },
-      { status: 'occupied', currentOrderId: order._id, customerCount: req.body.customerCount || 1 }
-    );
+    if (!isTakeaway && req.body.tableId) {
+      await Table.findOneAndUpdate(
+        { _id: req.body.tableId, restaurantId: req.restaurantId },
+        { status: 'occupied', currentOrderId: order._id, customerCount: req.body.customerCount || 1 }
+      );
+    }
 
     const io = req.app.get('io');
     const room = `restaurant-${req.restaurantId}`;
     io.to(`kitchen-${req.restaurantId}`).emit('new-order', order);
-    io.to(room).emit('table-updated');
+    if (!isTakeaway) {
+      io.to(room).emit('table-updated');
+    }
     io.to(room).emit('order-created', order);
 
     res.status(201).json(order);
@@ -224,11 +241,13 @@ router.put('/:id/status', auth, async (req, res) => {
     io.to(room).emit('order-status-updated', order);
 
     if (status === 'completed' || status === 'cancelled') {
-      await Table.findOneAndUpdate(
-        { _id: order.tableId, restaurantId: req.restaurantId },
-        { status: 'available', currentOrderId: null, customerCount: 0 }
-      );
-      io.to(room).emit('table-updated');
+      if (order.tableId) {
+        await Table.findOneAndUpdate(
+          { _id: order.tableId, restaurantId: req.restaurantId },
+          { status: 'available', currentOrderId: null, customerCount: 0 }
+        );
+        io.to(room).emit('table-updated');
+      }
     }
 
     res.json(order);
