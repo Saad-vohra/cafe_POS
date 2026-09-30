@@ -32,23 +32,71 @@ const CustomerBillPay = () => {
 
   // Base amounts
   const subtotal = billData?.subtotal || 507;
-  const tax = billData?.tax || 25;
-  const baseTotal = billData?.total || 532;
+  const tax = billData?.tax || billData?.gstAmount || 25;
+  const baseTotal = billData?.total || billData?.totalAmount || (subtotal + tax);
 
   // Calculate discount based on chosen reward
   let discountAmount = 0;
   if (selectedReward) {
-    if (selectedReward.rewardId === 'DISCOUNT_20') {
+    const titleLower = ((selectedReward.title || selectedReward.name || '') + ' ' + (selectedReward.description || '')).toLowerCase();
+    const idLower = (selectedReward.rewardId || '').toLowerCase();
+
+    const is20Percent =
+      selectedReward.rewardType === 'discount_percent' ||
+      selectedReward.rewardValue === 20 ||
+      idLower.includes('discount') ||
+      idLower.includes('20') ||
+      titleLower.includes('20%');
+
+    const isCoffee =
+      selectedReward.rewardType === 'free_item' ||
+      idLower.includes('coffee') ||
+      titleLower.includes('coffee') ||
+      titleLower.includes('espresso');
+
+    if (is20Percent) {
+      const pct = selectedReward.rewardValue || 20;
+      discountAmount = Math.round(subtotal * (pct / 100));
+    } else if (isCoffee) {
+      discountAmount = Math.min(subtotal, 120); // standard coffee price waiver
+    } else if (selectedReward.rewardValue > 0) {
+      discountAmount = selectedReward.rewardType === 'discount_percent'
+        ? Math.round(subtotal * (selectedReward.rewardValue / 100))
+        : Math.min(subtotal, selectedReward.rewardValue);
+    } else {
       discountAmount = Math.round(subtotal * 0.20);
-    } else if (selectedReward.rewardId === 'FREE_COFFEE') {
-      discountAmount = 149; // standard coffee price waiver
     }
   }
 
   const finalTotal = Math.max(0, baseTotal - discountAmount);
 
   // Available rewards list
-  const availableRewards = billData?.eligibleRewards || customer?.rewards?.filter(r => r.status === 'available') || [];
+  const availableRewards = (
+    (billData?.eligibleRewards && billData.eligibleRewards.length > 0)
+      ? billData.eligibleRewards
+      : (billData?.availableRewards && billData.availableRewards.length > 0)
+      ? billData.availableRewards
+      : (customer?.rewards && customer.rewards.filter(r => r.status === 'available').length > 0)
+      ? customer.rewards.filter(r => r.status === 'available')
+      : [
+          {
+            rewardId: 'rew_coffee_4',
+            title: 'Free Coffee',
+            name: 'Free Coffee',
+            description: 'Get a complimentary freshly brewed espresso or cappuccino',
+            rewardType: 'free_item',
+            rewardValue: 0
+          },
+          {
+            rewardId: 'rew_discount_8',
+            title: '20% OFF',
+            name: '20% OFF',
+            description: 'Enjoy 20% off your entire dining bill',
+            rewardType: 'discount_percent',
+            rewardValue: 20
+          }
+        ]
+  );
 
   const handleProceedToPayment = async () => {
     if (paymentMethod === 'UPI') {
@@ -73,6 +121,7 @@ const CustomerBillPay = () => {
       const result = await processPayment({
         paymentMethod,
         appliedRewardId: selectedReward?.rewardId || null,
+        rewardId: selectedReward?.rewardId || null,
         discountAmount,
         finalAmount: finalTotal,
         subtotal,
@@ -231,7 +280,7 @@ const CustomerBillPay = () => {
               padding: '6px 10px',
               borderRadius: 8
             }}>
-              <span>🎁 Reward Applied ({selectedReward.name})</span>
+              <span>🎁 Reward Applied ({selectedReward.title || selectedReward.name || '20% OFF'})</span>
               <span>-₹{discountAmount}</span>
             </div>
           )}
@@ -305,11 +354,11 @@ const CustomerBillPay = () => {
                 >
                   <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                     <span style={{ fontSize: 24 }}>
-                      {reward.rewardId === 'FREE_COFFEE' ? '☕' : '🏷️'}
+                      {(reward.rewardId === 'FREE_COFFEE' || reward.rewardId?.includes('coffee') || reward.title?.toLowerCase().includes('coffee')) ? '☕' : '🏷️'}
                     </span>
                     <div>
                       <div style={{ fontWeight: 800, color: '#1e293b', fontSize: '0.9rem' }}>
-                        {reward.name}
+                        {reward.title || reward.name || (reward.rewardId?.includes('coffee') ? 'Free Coffee' : '20% OFF')}
                       </div>
                       <div style={{ fontSize: '0.75rem', color: '#64748b' }}>
                         {reward.description}

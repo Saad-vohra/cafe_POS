@@ -294,7 +294,7 @@ const StaffScanQR = () => {
                   }}
                 >
                   <span style={{ fontWeight: 700, color: '#1e293b', fontSize: '0.88rem' }}>
-                    {rw.name}
+                    {rw.title || rw.name}
                   </span>
                   <span style={{
                     fontSize: '0.74rem',

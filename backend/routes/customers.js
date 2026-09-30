@@ -256,7 +256,16 @@ router.get('/:id/table-bill', async (req, res) => {
     // Filter available rewards customer can redeem
     customer.initDefaultRewards();
     customer.evaluateRewards();
-    const availableRewards = customer.rewards.filter(r => r.status === 'available');
+    const availableRewards = customer.rewards
+      .filter(r => r.status === 'available')
+      .map(r => {
+        const obj = r.toObject ? r.toObject() : { ...r };
+        return {
+          ...obj,
+          name: obj.title || obj.name,
+          title: obj.title || obj.name
+        };
+      });
 
     res.json({
       hasActiveOrder: true,
@@ -268,7 +277,8 @@ router.get('/:id/table-bill', async (req, res) => {
       gstAmount,
       totalAmount,
       customer,
-      availableRewards
+      availableRewards,
+      eligibleRewards: availableRewards
     });
   } catch (err) {
     res.status(500).json({ message: err.message });
@@ -301,22 +311,44 @@ router.post('/:id/pay-bill', async (req, res) => {
     let discountAmount = 0;
     let appliedReward = null;
 
+    const effectiveRewardId = req.body.rewardId || req.body.appliedRewardId;
+    const effectivePaymentMode = (req.body.paymentMode || req.body.paymentMethod || 'upi').toLowerCase();
+
     // If customer selected a reward, validate and apply
-    if (rewardId) {
+    if (effectiveRewardId) {
       customer.initDefaultRewards();
       customer.evaluateRewards();
-      const targetRew = customer.rewards.find(r => r.rewardId === rewardId && r.status === 'available');
+      const effLower = String(effectiveRewardId).toLowerCase();
+      let targetRew = customer.rewards.find(r =>
+        r.status === 'available' && (
+          r.rewardId === effectiveRewardId ||
+          r._id?.toString() === effectiveRewardId
+        )
+      );
+
+      // Flexible fallback match if ID string differs slightly (e.g., rew_discount_8 vs DISCOUNT_20)
+      if (!targetRew) {
+        if (effLower.includes('discount') || effLower.includes('20')) {
+          targetRew = customer.rewards.find(r => r.status === 'available' && (r.rewardType === 'discount_percent' || r.rewardId?.includes('discount')));
+        } else if (effLower.includes('coffee') || effLower.includes('free')) {
+          targetRew = customer.rewards.find(r => r.status === 'available' && (r.rewardType === 'free_item' || r.rewardId?.includes('coffee')));
+        }
+      }
+
       if (targetRew) {
-        if (targetRew.rewardType === 'discount_percent') {
-          discountAmount = Math.round(subtotal * (targetRew.rewardValue / 100));
+        if (targetRew.rewardType === 'discount_percent' || targetRew.rewardValue > 0) {
+          const pct = targetRew.rewardValue || 20;
+          discountAmount = Math.round(subtotal * (pct / 100));
         } else if (targetRew.rewardType === 'free_item') {
-          // Free item benefit e.g. Free coffee (deduct up to ₹150 or item value)
+          // Free item benefit e.g. Free coffee (deduct standard coffee value up to subtotal)
           discountAmount = Math.min(subtotal, 120);
+        } else {
+          discountAmount = Math.round(subtotal * 0.20);
         }
 
         appliedReward = {
           rewardId: targetRew.rewardId,
-          title: targetRew.title,
+          title: targetRew.title || '20% OFF',
           discountAmount
         };
 
@@ -354,7 +386,7 @@ router.post('/:id/pay-bill', async (req, res) => {
       gstRate,
       gstAmount,
       totalAmount,
-      paymentMode: paymentMode || 'upi',
+      paymentMode: effectivePaymentMode,
       paymentStatus: 'paid',
       customerCount: order.customerCount || 1
     });

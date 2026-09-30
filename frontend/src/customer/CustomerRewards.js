@@ -35,7 +35,8 @@ const CustomerRewards = () => {
         {
           _id: 'rw_1',
           rewardId: 'FREE_COFFEE',
-          name: 'Free Artisan Coffee',
+          title: 'Free Coffee',
+          name: 'Free Coffee',
           description: 'Any hot or cold specialty espresso beverage on the house',
           requiredStamps: 4,
           status: totalStamps >= 4 ? 'available' : 'locked',
@@ -44,7 +45,8 @@ const CustomerRewards = () => {
         {
           _id: 'rw_2',
           rewardId: 'DISCOUNT_20',
-          name: '20% OFF Entire Bill',
+          title: '20% OFF',
+          name: '20% OFF',
           description: 'Get 20% flat discount on your complete dine-in food order',
           requiredStamps: 8,
           status: totalStamps >= 8 ? 'available' : 'locked',
@@ -288,12 +290,12 @@ const CustomerRewards = () => {
                     justifyContent: 'center',
                     fontSize: 22
                   }}>
-                    {reward.rewardId === 'FREE_COFFEE' ? '☕' : '🏷️'}
+                    {(reward.rewardId === 'FREE_COFFEE' || reward.rewardId?.includes('coffee') || reward.title?.toLowerCase().includes('coffee')) ? '☕' : '🏷️'}
                   </div>
 
                   <div>
                     <h5 style={{ fontSize: '0.95rem', fontWeight: 800, color: '#1e293b', margin: 0 }}>
-                      {reward.name}
+                      {reward.title || reward.name || (reward.rewardId?.includes('coffee') ? 'Free Coffee' : '20% OFF')}
                     </h5>
                     <div style={{ fontSize: '0.78rem', color: '#64748b', marginTop: 2 }}>
                       {reward.description}

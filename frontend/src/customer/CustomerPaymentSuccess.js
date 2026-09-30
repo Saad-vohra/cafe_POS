@@ -77,6 +77,13 @@ const CustomerPaymentSuccess = () => {
             <span style={{ fontWeight: 700, color: '#1e293b' }}>Table {tableNumber || 5}</span>
           </div>
 
+          {appliedReward && (
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8, fontSize: '0.85rem', color: 'var(--primary-green)' }}>
+              <span>Reward Applied</span>
+              <span style={{ fontWeight: 700 }}>🎁 {appliedReward.title || appliedReward.name || '20% OFF'}</span>
+            </div>
+          )}
+
           <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8, fontSize: '0.85rem' }}>
             <span style={{ color: '#64748b' }}>Amount Paid</span>
             <span style={{ fontWeight: 800, color: 'var(--primary-green)', fontSize: '1rem' }}>₹{finalTotal}</span>

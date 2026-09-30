@@ -48,6 +48,7 @@ const CustomerUPIPay = () => {
       const result = await processPayment({
         paymentMethod: 'UPI',
         appliedRewardId: selectedReward?.rewardId || null,
+        rewardId: selectedReward?.rewardId || null,
         discountAmount,
         finalAmount: finalTotal,
         subtotal: billData?.subtotal || (finalTotal - 25),
@@ -130,6 +131,20 @@ const CustomerUPIPay = () => {
           <div style={{ fontSize: '2rem', fontWeight: 900, color: 'var(--primary-green)' }}>
             ₹{finalTotal}
           </div>
+          {discountAmount > 0 && (
+            <div style={{
+              fontSize: '0.75rem',
+              color: 'var(--primary-green)',
+              fontWeight: 700,
+              marginTop: 4,
+              background: 'var(--light-green)',
+              padding: '2px 8px',
+              borderRadius: 6,
+              display: 'inline-block'
+            }}>
+              🎁 ₹{discountAmount} off ({selectedReward?.title || selectedReward?.name || '20% OFF'})
+            </div>
+          )}
         </div>
 
         {/* UPI QR Frame */}
