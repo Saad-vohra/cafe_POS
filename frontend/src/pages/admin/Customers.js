@@ -19,9 +19,121 @@ export default function Customers() {
   const [selectedCustomer, setSelectedCustomer] = useState(null);
   const [addingStampId, setAddingStampId] = useState(null);
 
+  // Tab & Loyalty Settings state
+  const [activeTab, setActiveTab] = useState('directory'); // 'directory' | 'offers'
+  const [loyaltySettings, setLoyaltySettings] = useState({
+    stampsPerCard: 8,
+    milestones: []
+  });
+  const [loadingLoyalty, setLoadingLoyalty] = useState(false);
+  const [savingLoyalty, setSavingLoyalty] = useState(false);
+  const [milestoneModalOpen, setMilestoneModalOpen] = useState(false);
+  const [editingMilestone, setEditingMilestone] = useState(null);
+  const [milestoneForm, setMilestoneForm] = useState({
+    milestoneId: '',
+    requiredStamps: 4,
+    title: '',
+    description: '',
+    rewardType: 'free_item',
+    rewardValue: 0,
+    icon: '☕'
+  });
+
   useEffect(() => {
     loadCustomers();
+    loadLoyaltySettings();
   }, [filter]);
+
+  const loadLoyaltySettings = async () => {
+    try {
+      setLoadingLoyalty(true);
+      const res = await axios.get('/api/loyalty-settings');
+      if (res.data) {
+        setLoyaltySettings(res.data);
+      }
+    } catch (err) {
+      console.warn('Failed to load loyalty settings:', err.message);
+    } finally {
+      setLoadingLoyalty(false);
+    }
+  };
+
+  const handleSaveLoyaltySettings = async (customSettings) => {
+    try {
+      setSavingLoyalty(true);
+      const toSave = customSettings || loyaltySettings;
+      const res = await axios.put('/api/loyalty-settings', toSave);
+      setLoyaltySettings(res.data.settings);
+      toast.success('🎉 Loyalty Program offers updated! Live on customer apps.');
+    } catch (err) {
+      toast.error('Failed to save loyalty settings');
+    } finally {
+      setSavingLoyalty(false);
+    }
+  };
+
+  const openMilestoneModal = (milestone = null) => {
+    if (milestone) {
+      setEditingMilestone(milestone);
+      setMilestoneForm({
+        milestoneId: milestone.milestoneId || `milestone_${Date.now()}`,
+        requiredStamps: milestone.requiredStamps || 4,
+        title: milestone.title || '',
+        description: milestone.description || '',
+        rewardType: milestone.rewardType || 'free_item',
+        rewardValue: milestone.rewardValue || 0,
+        icon: milestone.icon || '🎁'
+      });
+    } else {
+      setEditingMilestone(null);
+      const maxStamps = loyaltySettings.milestones?.length
+        ? Math.max(...loyaltySettings.milestones.map(m => m.requiredStamps))
+        : 2;
+      setMilestoneForm({
+        milestoneId: `milestone_${Date.now()}`,
+        requiredStamps: Math.min(loyaltySettings.stampsPerCard || 8, maxStamps + 2),
+        title: '',
+        description: '',
+        rewardType: 'free_item',
+        rewardValue: 0,
+        icon: '🎁'
+      });
+    }
+    setMilestoneModalOpen(true);
+  };
+
+  const handleSaveMilestoneForm = (e) => {
+    e.preventDefault();
+    if (!milestoneForm.title.trim()) {
+      toast.error('Please enter a reward title');
+      return;
+    }
+    const updatedMilestones = [...(loyaltySettings.milestones || [])];
+    if (editingMilestone) {
+      const idx = updatedMilestones.findIndex(m => m.milestoneId === editingMilestone.milestoneId);
+      if (idx !== -1) {
+        updatedMilestones[idx] = { ...milestoneForm };
+      } else {
+        updatedMilestones.push({ ...milestoneForm });
+      }
+    } else {
+      updatedMilestones.push({ ...milestoneForm });
+    }
+
+    updatedMilestones.sort((a, b) => a.requiredStamps - b.requiredStamps);
+    const updated = { ...loyaltySettings, milestones: updatedMilestones };
+    setLoyaltySettings(updated);
+    setMilestoneModalOpen(false);
+    handleSaveLoyaltySettings(updated);
+  };
+
+  const handleDeleteMilestone = (milestoneId) => {
+    if (!window.confirm('Are you sure you want to remove this reward offer milestone?')) return;
+    const filtered = (loyaltySettings.milestones || []).filter(m => m.milestoneId !== milestoneId);
+    const updated = { ...loyaltySettings, milestones: filtered };
+    setLoyaltySettings(updated);
+    handleSaveLoyaltySettings(updated);
+  };
 
   const loadCustomers = async () => {
     try {
@@ -191,7 +303,71 @@ export default function Customers() {
         </div>
       </div>
 
-      {/* Search Bar & Filter Tabs */}
+      {/* Main Admin Section Tabs */}
+      <div style={{
+        display: 'flex',
+        gap: 12,
+        marginBottom: 20,
+        background: '#FFFFFF',
+        padding: '8px 12px',
+        borderRadius: 16,
+        border: '1px solid #E2E8F0'
+      }}>
+        <button
+          onClick={() => setActiveTab('directory')}
+          style={{
+            padding: '10px 22px',
+            borderRadius: 12,
+            fontWeight: 800,
+            fontSize: '0.92rem',
+            border: 'none',
+            background: activeTab === 'directory' ? '#087F45' : 'transparent',
+            color: activeTab === 'directory' ? '#FFFFFF' : '#475569',
+            cursor: 'pointer',
+            boxShadow: activeTab === 'directory' ? '0 4px 12px rgba(8,127,69,0.25)' : 'none',
+            transition: 'all 0.2s'
+          }}
+        >
+          👥 Customer Directory & Stamps
+        </button>
+
+        <button
+          onClick={() => {
+            setActiveTab('offers');
+            loadLoyaltySettings();
+          }}
+          style={{
+            padding: '10px 22px',
+            borderRadius: 12,
+            fontWeight: 800,
+            fontSize: '0.92rem',
+            border: 'none',
+            background: activeTab === 'offers' ? '#087F45' : 'transparent',
+            color: activeTab === 'offers' ? '#FFFFFF' : '#475569',
+            cursor: 'pointer',
+            boxShadow: activeTab === 'offers' ? '0 4px 12px rgba(8,127,69,0.25)' : 'none',
+            transition: 'all 0.2s',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 6
+          }}
+        >
+          <span>🎁 Loyalty Program & Reward Offers Settings</span>
+          <span style={{
+            background: activeTab === 'offers' ? 'rgba(255,255,255,0.25)' : '#E2E8F0',
+            padding: '2px 8px',
+            borderRadius: 8,
+            fontSize: '0.74rem'
+          }}>
+            ⚙️ Configure
+          </span>
+        </button>
+      </div>
+
+      {/* TAB 1: CUSTOMER DIRECTORY */}
+      {activeTab === 'directory' && (
+        <>
+          {/* Search Bar & Filter Tabs */}
       <div style={{
         background: '#FFFFFF',
         borderRadius: 16,
@@ -452,6 +628,481 @@ export default function Customers() {
           </div>
         )}
       </div>
+      </>
+      )}
+
+      {/* TAB 2: LOYALTY PROGRAM & REWARD OFFERS CONFIGURATION */}
+      {activeTab === 'offers' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+          {/* Card Size & Settings Card */}
+          <div style={{
+            background: '#FFFFFF',
+            borderRadius: 20,
+            padding: '24px',
+            border: '1px solid #E2E8F0',
+            boxShadow: '0 2px 10px rgba(0,0,0,0.04)'
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 16 }}>
+              <div>
+                <h3 style={{ fontSize: '1.25rem', fontWeight: 900, color: '#1A2E22', margin: '0 0 6px 0' }}>
+                  🎯 Loyalty Card Cycle Size
+                </h3>
+                <p style={{ color: '#64748B', fontSize: '0.88rem', margin: 0, maxWidth: 640 }}>
+                  Configure how many stamps are printed on a single loyalty card. Once a customer collects this number of stamps, their card completes, and their very next stamp automatically starts a brand-new card cycle (e.g. Card #2).
+                </p>
+              </div>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12, background: '#F8FAF8', padding: '12px 18px', borderRadius: 14, border: '1.5px solid #C7E3D0' }}>
+                <span style={{ fontWeight: 800, color: '#1A2E22', fontSize: '0.92rem' }}>
+                  Stamps per Card:
+                </span>
+                <input
+                  type="number"
+                  min="2"
+                  max="20"
+                  value={loyaltySettings.stampsPerCard || 8}
+                  onChange={(e) => {
+                    const val = parseInt(e.target.value, 10) || 8;
+                    setLoyaltySettings(prev => ({ ...prev, stampsPerCard: val }));
+                  }}
+                  style={{
+                    width: 70,
+                    height: 38,
+                    textAlign: 'center',
+                    fontWeight: 900,
+                    fontSize: '1.1rem',
+                    color: '#087F45',
+                    borderRadius: 10,
+                    border: '1.5px solid #087F45',
+                    background: '#FFFFFF'
+                  }}
+                />
+                <button
+                  onClick={() => handleSaveLoyaltySettings()}
+                  disabled={savingLoyalty}
+                  style={{
+                    background: '#087F45',
+                    color: '#FFFFFF',
+                    border: 'none',
+                    padding: '8px 16px',
+                    borderRadius: 10,
+                    fontWeight: 800,
+                    fontSize: '0.85rem',
+                    cursor: 'pointer'
+                  }}
+                >
+                  {savingLoyalty ? 'Saving...' : 'Update Size'}
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Reward Milestones Manager */}
+          <div style={{
+            background: '#FFFFFF',
+            borderRadius: 20,
+            padding: '24px',
+            border: '1px solid #E2E8F0',
+            boxShadow: '0 2px 10px rgba(0,0,0,0.04)'
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20, flexWrap: 'wrap', gap: 12 }}>
+              <div>
+                <h3 style={{ fontSize: '1.25rem', fontWeight: 900, color: '#1A2E22', margin: '0 0 4px 0' }}>
+                  🎁 Configured Reward Offers & Milestones
+                </h3>
+                <p style={{ color: '#64748B', fontSize: '0.88rem', margin: 0 }}>
+                  Define at which stamp milestone the customer gets an offer, and choose whether it is a complimentary free item or a bill discount.
+                </p>
+              </div>
+
+              <button
+                onClick={() => openMilestoneModal(null)}
+                style={{
+                  background: 'linear-gradient(135deg, #087F45 0%, #055C31 100%)',
+                  color: '#FFFFFF',
+                  border: 'none',
+                  borderRadius: 12,
+                  padding: '10px 18px',
+                  fontWeight: 800,
+                  fontSize: '0.88rem',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  boxShadow: '0 4px 14px rgba(8, 127, 69, 0.25)'
+                }}
+              >
+                <span>➕</span>
+                <span>Add Reward Milestone</span>
+              </button>
+            </div>
+
+            {loadingLoyalty ? (
+              <div style={{ textAlign: 'center', padding: '36px', color: '#64748B' }}>
+                Loading loyalty milestones...
+              </div>
+            ) : loyaltySettings.milestones && loyaltySettings.milestones.length > 0 ? (
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 16 }}>
+                {loyaltySettings.milestones.map((m) => (
+                  <div
+                    key={m.milestoneId}
+                    style={{
+                      background: '#F8FAF8',
+                      borderRadius: 16,
+                      padding: '18px 20px',
+                      border: '1.5px solid #E2E8F0',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      justifyContent: 'space-between',
+                      gap: 14
+                    }}
+                  >
+                    <div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 10 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                          <span style={{ fontSize: 32 }}>{m.icon || '🎁'}</span>
+                          <div>
+                            <div style={{ fontWeight: 900, color: '#1A2E22', fontSize: '1.05rem' }}>
+                              {m.title}
+                            </div>
+                            <div style={{ fontSize: '0.78rem', color: '#64748B', marginTop: 2 }}>
+                              {m.description || 'Customer reward milestone'}
+                            </div>
+                          </div>
+                        </div>
+
+                        <span style={{
+                          background: '#EBF7EE',
+                          color: '#087F45',
+                          fontWeight: 900,
+                          fontSize: '0.82rem',
+                          padding: '4px 12px',
+                          borderRadius: 20,
+                          border: '1px solid #C7E3D0',
+                          whiteSpace: 'nowrap'
+                        }}>
+                          🎯 At {m.requiredStamps} Stamps
+                        </span>
+                      </div>
+
+                      {/* Reward Type Tag */}
+                      <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 8 }}>
+                        <span style={{
+                          fontSize: '0.75rem',
+                          fontWeight: 800,
+                          padding: '3px 10px',
+                          borderRadius: 8,
+                          background: m.rewardType === 'free_item' ? '#DCFCE7' : m.rewardType === 'discount_percent' ? '#DBEAFE' : '#FEF3C7',
+                          color: m.rewardType === 'free_item' ? '#166534' : m.rewardType === 'discount_percent' ? '#1E40AF' : '#92400E'
+                        }}>
+                          {m.rewardType === 'free_item'
+                            ? '☕ Complimentary Free Item (₹0 cut from bill)'
+                            : m.rewardType === 'discount_percent'
+                            ? `🏷️ ${m.rewardValue}% OFF on Food Bill`
+                            : `💵 Flat ₹${m.rewardValue} OFF on Total`}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Actions */}
+                    <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, borderTop: '1px solid #E2E8F0', paddingTop: 12 }}>
+                      <button
+                        onClick={() => openMilestoneModal(m)}
+                        style={{
+                          background: '#FFFFFF',
+                          border: '1px solid #CBD5E1',
+                          borderRadius: 8,
+                          padding: '6px 12px',
+                          fontSize: '0.8rem',
+                          fontWeight: 700,
+                          color: '#334155',
+                          cursor: 'pointer'
+                        }}
+                      >
+                        ✏️ Edit
+                      </button>
+                      <button
+                        onClick={() => handleDeleteMilestone(m.milestoneId)}
+                        style={{
+                          background: '#FEE2E2',
+                          border: 'none',
+                          borderRadius: 8,
+                          padding: '6px 12px',
+                          fontSize: '0.8rem',
+                          fontWeight: 700,
+                          color: '#B91C1C',
+                          cursor: 'pointer'
+                        }}
+                      >
+                        🗑️ Delete
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div style={{ textAlign: 'center', padding: '36px', background: '#F8FAF8', borderRadius: 16 }}>
+                <div style={{ fontSize: 36, marginBottom: 8 }}>🎁</div>
+                <div style={{ fontWeight: 800, color: '#1A2E22', fontSize: '1rem', marginBottom: 4 }}>
+                  No Reward Milestones Configured Yet
+                </div>
+                <p style={{ color: '#64748B', fontSize: '0.85rem', marginBottom: 14 }}>
+                  Add your first milestone offer (e.g. Free Coffee at 4 stamps, 20% OFF at 8 stamps).
+                </p>
+                <button
+                  onClick={() => openMilestoneModal(null)}
+                  style={{
+                    background: '#087F45',
+                    color: '#FFFFFF',
+                    border: 'none',
+                    borderRadius: 10,
+                    padding: '8px 18px',
+                    fontWeight: 800,
+                    cursor: 'pointer'
+                  }}
+                >
+                  + Add First Milestone
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: ADD / EDIT REWARD MILESTONE */}
+      {milestoneModalOpen && (
+        <div style={{
+          position: 'fixed',
+          inset: 0,
+          background: 'rgba(0,0,0,0.6)',
+          backdropFilter: 'blur(4px)',
+          zIndex: 9999,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: 16
+        }}>
+          <div style={{
+            background: '#FFFFFF',
+            borderRadius: 22,
+            width: '100%',
+            maxWidth: 480,
+            padding: 24,
+            boxShadow: '0 20px 50px rgba(0,0,0,0.2)'
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+              <h3 style={{ fontSize: '1.25rem', fontWeight: 900, color: '#1A2E22', margin: 0 }}>
+                {editingMilestone ? '✏️ Edit Reward Milestone' : '➕ Add New Reward Milestone'}
+              </h3>
+              <button
+                onClick={() => setMilestoneModalOpen(false)}
+                style={{
+                  background: '#F1F5F9',
+                  border: 'none',
+                  borderRadius: '50%',
+                  width: 32,
+                  height: 32,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  cursor: 'pointer',
+                  fontWeight: 800
+                }}
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveMilestoneForm} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+              {/* Required Stamps */}
+              <div>
+                <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 700, color: '#334155', marginBottom: 4 }}>
+                  Required Stamps (At which stamp does the customer get this offer?)
+                </label>
+                <input
+                  type="number"
+                  min="1"
+                  max="24"
+                  required
+                  value={milestoneForm.requiredStamps}
+                  onChange={(e) => setMilestoneForm(prev => ({ ...prev, requiredStamps: parseInt(e.target.value, 10) || 1 }))}
+                  style={{
+                    width: '100%',
+                    padding: '10px 12px',
+                    borderRadius: 10,
+                    border: '1.5px solid #CBD5E1',
+                    fontSize: '0.92rem',
+                    boxSizing: 'border-box'
+                  }}
+                />
+              </div>
+
+              {/* Reward Title */}
+              <div>
+                <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 700, color: '#334155', marginBottom: 4 }}>
+                  Reward Offer Title (e.g. Free Coffee, 20% OFF, Free Dessert)
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. Free Artisan Coffee"
+                  value={milestoneForm.title}
+                  onChange={(e) => setMilestoneForm(prev => ({ ...prev, title: e.target.value }))}
+                  style={{
+                    width: '100%',
+                    padding: '10px 12px',
+                    borderRadius: 10,
+                    border: '1.5px solid #CBD5E1',
+                    fontSize: '0.92rem',
+                    boxSizing: 'border-box'
+                  }}
+                />
+              </div>
+
+              {/* Reward Type */}
+              <div>
+                <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 700, color: '#334155', marginBottom: 4 }}>
+                  Reward Type
+                </label>
+                <select
+                  value={milestoneForm.rewardType}
+                  onChange={(e) => {
+                    const rType = e.target.value;
+                    setMilestoneForm(prev => ({
+                      ...prev,
+                      rewardType: rType,
+                      icon: rType === 'free_item' ? '☕' : '🏷️'
+                    }));
+                  }}
+                  style={{
+                    width: '100%',
+                    padding: '10px 12px',
+                    borderRadius: 10,
+                    border: '1.5px solid #CBD5E1',
+                    fontSize: '0.92rem',
+                    boxSizing: 'border-box',
+                    background: '#FFFFFF'
+                  }}
+                >
+                  <option value="free_item">☕ Complimentary Free Item (Served free, ₹0 cut from bill)</option>
+                  <option value="discount_percent">🏷️ Percentage Discount (% cut from bill subtotal)</option>
+                  <option value="discount_flat">💵 Flat Cash Discount (₹ cut from bill total)</option>
+                </select>
+              </div>
+
+              {/* Reward Value (if discount) */}
+              {milestoneForm.rewardType !== 'free_item' && (
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 700, color: '#334155', marginBottom: 4 }}>
+                    {milestoneForm.rewardType === 'discount_percent' ? 'Discount Percentage (%)' : 'Discount Flat Amount (₹)'}
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    max={milestoneForm.rewardType === 'discount_percent' ? 100 : 5000}
+                    required
+                    value={milestoneForm.rewardValue}
+                    onChange={(e) => setMilestoneForm(prev => ({ ...prev, rewardValue: parseFloat(e.target.value) || 0 }))}
+                    style={{
+                      width: '100%',
+                      padding: '10px 12px',
+                      borderRadius: 10,
+                      border: '1.5px solid #CBD5E1',
+                      fontSize: '0.92rem',
+                      boxSizing: 'border-box'
+                    }}
+                  />
+                </div>
+              )}
+
+              {/* Description */}
+              <div>
+                <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 700, color: '#334155', marginBottom: 4 }}>
+                  Description (shown to customer)
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. Get a complimentary freshly brewed espresso or cappuccino"
+                  value={milestoneForm.description}
+                  onChange={(e) => setMilestoneForm(prev => ({ ...prev, description: e.target.value }))}
+                  style={{
+                    width: '100%',
+                    padding: '10px 12px',
+                    borderRadius: 10,
+                    border: '1.5px solid #CBD5E1',
+                    fontSize: '0.92rem',
+                    boxSizing: 'border-box'
+                  }}
+                />
+              </div>
+
+              {/* Icon Selector */}
+              <div>
+                <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 700, color: '#334155', marginBottom: 6 }}>
+                  Display Icon
+                </label>
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                  {['☕', '🏷️', '🎁', '🍰', '🍕', '🍹', '🍔', '🍨', '🥗'].map(ic => (
+                    <button
+                      key={ic}
+                      type="button"
+                      onClick={() => setMilestoneForm(prev => ({ ...prev, icon: ic }))}
+                      style={{
+                        fontSize: 22,
+                        width: 42,
+                        height: 42,
+                        borderRadius: 10,
+                        border: milestoneForm.icon === ic ? '2px solid #087F45' : '1px solid #CBD5E1',
+                        background: milestoneForm.icon === ic ? '#EBF7EE' : '#FFFFFF',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      {ic}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Buttons */}
+              <div style={{ display: 'flex', gap: 10, marginTop: 10 }}>
+                <button
+                  type="submit"
+                  disabled={savingLoyalty}
+                  style={{
+                    flex: 1,
+                    background: '#087F45',
+                    color: '#FFFFFF',
+                    border: 'none',
+                    borderRadius: 12,
+                    padding: '12px',
+                    fontWeight: 800,
+                    fontSize: '0.92rem',
+                    cursor: 'pointer'
+                  }}
+                >
+                  {savingLoyalty ? 'Saving...' : 'Save Milestone'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setMilestoneModalOpen(false)}
+                  style={{
+                    background: '#F1F5F9',
+                    color: '#475569',
+                    border: 'none',
+                    borderRadius: 12,
+                    padding: '12px 18px',
+                    fontWeight: 700,
+                    fontSize: '0.92rem',
+                    cursor: 'pointer'
+                  }}
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {/* Customer Details & Reward QR Modal */}
       {selectedCustomer && (

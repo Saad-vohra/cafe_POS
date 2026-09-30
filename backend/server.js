@@ -47,6 +47,7 @@ app.use('/api/bills', require('./routes/bills'));
 app.use('/api/reports', require('./routes/reports'));
 app.use('/api/users', require('./routes/users'));
 app.use('/api/customers', require('./routes/customers'));
+app.use('/api/loyalty-settings', require('./routes/loyaltySettings'));
 
 // Socket.io — rooms are scoped per-restaurant so tenants never see each other's events
 io.on('connection', (socket) => {

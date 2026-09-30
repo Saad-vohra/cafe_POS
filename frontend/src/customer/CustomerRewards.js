@@ -4,7 +4,7 @@ import { useCustomer } from './CustomerContext';
 
 const CustomerRewards = () => {
   const navigate = useNavigate();
-  const { customer, getNextReward, refreshCustomer } = useCustomer();
+  const { customer, getNextReward, refreshCustomer, loyaltySettings } = useCustomer();
 
   useEffect(() => {
     if (typeof refreshCustomer === 'function') {
@@ -13,21 +13,28 @@ const CustomerRewards = () => {
   }, []);
 
   const totalStamps = customer?.totalStamps || 0;
-  const cardCycle = Math.floor(Math.max(0, totalStamps - 1) / 8) + 1;
-  const currentStampsInCycle = totalStamps === 0 ? 0 : ((totalStamps - 1) % 8) + 1;
+  const stampsPerCard = loyaltySettings?.stampsPerCard || 8;
+  const activeMilestones = (loyaltySettings?.milestones || [])
+    .filter(m => m.isActive !== false)
+    .sort((a, b) => a.requiredStamps - b.requiredStamps);
+
+  const cardCycle = Math.floor(Math.max(0, totalStamps - 1) / stampsPerCard) + 1;
+  const currentStampsInCycle = totalStamps === 0 ? 0 : ((totalStamps - 1) % stampsPerCard) + 1;
   const nextReward = getNextReward();
 
-  // All 8 card slots
-  const STAMP_SLOTS = [
-    { num: 1, type: 'normal' },
-    { num: 2, type: 'normal' },
-    { num: 3, type: 'normal' },
-    { num: 4, type: 'milestone', label: '☕ Free Coffee', required: 4 },
-    { num: 5, type: 'normal' },
-    { num: 6, type: 'normal' },
-    { num: 7, type: 'normal' },
-    { num: 8, type: 'grand', label: '🏷️ 20% OFF', required: 8 }
-  ];
+  // All card slots dynamically generated up to stampsPerCard
+  const STAMP_SLOTS = Array.from({ length: stampsPerCard }, (_, i) => {
+    const num = i + 1;
+    const milestone = activeMilestones.find(m => m.requiredStamps === num);
+    const isGrand = num === stampsPerCard;
+    return {
+      num,
+      type: milestone ? (isGrand ? 'grand' : 'milestone') : 'normal',
+      label: milestone?.title || '',
+      icon: milestone?.icon || (isGrand ? '🎁' : '☕'),
+      required: num
+    };
+  });
 
   // List of rewards with their status
   const rewardsList = customer?.rewards && customer.rewards.length > 0
@@ -142,7 +149,7 @@ const CustomerRewards = () => {
             fontWeight: 800,
             fontSize: '0.88rem'
           }}>
-            {currentStampsInCycle} / 8 Stamps
+            {currentStampsInCycle} / {stampsPerCard} Stamps
           </div>
         </div>
 
@@ -185,15 +192,12 @@ const CustomerRewards = () => {
               >
                 {isEarned ? (
                   <span style={{ fontSize: 22, fontWeight: 900 }}>✓</span>
-                ) : isGrand ? (
+                ) : slot.type !== 'normal' ? (
                   <>
-                    <span style={{ fontSize: 18 }}>🎁</span>
-                    <span style={{ fontSize: '0.62rem', fontWeight: 800, color: '#b45309' }}>20% OFF</span>
-                  </>
-                ) : isMilestone ? (
-                  <>
-                    <span style={{ fontSize: 18 }}>☕</span>
-                    <span style={{ fontSize: '0.62rem', fontWeight: 800, color: '#b45309' }}>Coffee</span>
+                    <span style={{ fontSize: 18 }}>{slot.icon}</span>
+                    <span style={{ fontSize: '0.6rem', fontWeight: 800, color: '#b45309', textAlign: 'center', lineHeight: 1.1, padding: '0 2px' }}>
+                      {slot.label}
+                    </span>
                   </>
                 ) : (
                   <span style={{ fontSize: '1rem', fontWeight: 700, opacity: 0.5 }}>

@@ -5,14 +5,16 @@ import { useCustomer } from './CustomerContext';
 
 const CustomerProfile = () => {
   const navigate = useNavigate();
-  const { customer, tableNumber, logoutCustomer } = useCustomer();
+  const { customer, tableNumber, logoutCustomer, loyaltySettings } = useCustomer();
   const [selectedPastOrder, setSelectedPastOrder] = useState(null);
   const [orderHistory, setOrderHistory] = useState([]);
   const [loadingOrders, setLoadingOrders] = useState(true);
 
   const totalStamps = customer?.totalStamps || 0;
-  const cardCycle = Math.floor(Math.max(0, totalStamps - 1) / 8) + 1;
-  const currentStampsInCycle = totalStamps === 0 ? 0 : ((totalStamps - 1) % 8) + 1;
+  const stampsPerCard = loyaltySettings?.stampsPerCard || 8;
+  const activeMilestones = (loyaltySettings?.milestones || []).filter(m => m.isActive !== false);
+  const cardCycle = Math.floor(Math.max(0, totalStamps - 1) / stampsPerCard) + 1;
+  const currentStampsInCycle = totalStamps === 0 ? 0 : ((totalStamps - 1) % stampsPerCard) + 1;
 
   // Fetch real dining orders for this customer from database
   useEffect(() => {
@@ -110,15 +112,16 @@ const CustomerProfile = () => {
             fontWeight: 800,
             color: 'var(--primary-green)'
           }}>
-            {currentStampsInCycle} / 8 Stamps {cardCycle > 1 ? `(Card #${cardCycle})` : ''}
+            {currentStampsInCycle} / {stampsPerCard} Stamps {cardCycle > 1 ? `(Card #${cardCycle})` : ''}
           </span>
         </div>
 
-        {/* 8 stamp circles */}
+        {/* Dynamic stamp circles */}
         <div style={{ display: 'flex', justifyContent: 'space-between', gap: 6, marginBottom: 14 }}>
-          {[1, 2, 3, 4, 5, 6, 7, 8].map((s) => {
+          {Array.from({ length: stampsPerCard }, (_, i) => i + 1).map((s) => {
             const isEarned = currentStampsInCycle >= s;
-            const isRewardSlot = s === 4 || s === 8;
+            const milestone = activeMilestones.find(m => m.requiredStamps === s);
+            const isRewardSlot = !!milestone;
 
             return (
               <div
@@ -145,7 +148,7 @@ const CustomerProfile = () => {
                   fontWeight: 800
                 }}
               >
-                {isEarned ? '✓' : isRewardSlot ? (s === 4 ? '☕' : '🎁') : s}
+                {isEarned ? '✓' : isRewardSlot ? (milestone.icon || '🎁') : s}
               </div>
             );
           })}

@@ -236,17 +236,19 @@ router.get('/token/:token', async (req, res) => {
 // 4. Staff adds stamp after scanning customer QR code or from Admin Panel
 router.post('/add-stamp', async (req, res) => {
   try {
-    const { token, customerId, stampsToAdd } = req.body;
+    const { token, customerId, phone, stampsToAdd } = req.body;
     let query = {};
     if (token) {
       query.rewardToken = token;
+    } else if (phone) {
+      query.phone = phone;
     } else if (customerId) {
       const isObjectId = require('mongoose').Types.ObjectId.isValid(customerId);
       query = isObjectId
-        ? { $or: [{ _id: customerId }, { customerId }] }
-        : { customerId };
+        ? { $or: [{ _id: customerId }, { customerId }, { phone: customerId }] }
+        : { $or: [{ customerId }, { phone: customerId }] };
     } else {
-      return res.status(400).json({ message: 'Reward token or Customer ID required' });
+      return res.status(400).json({ message: 'Reward token, Phone or Customer ID required' });
     }
 
     const customer = await Customer.findOne(query);
@@ -337,7 +339,9 @@ router.get('/:id/table-bill', async (req, res) => {
     const totalAmount = subtotal + gstAmount;
 
     // Filter available rewards customer can redeem
-    customer.initDefaultRewards();
+    const LoyaltySetting = require('../models/LoyaltySetting');
+    const settings = await LoyaltySetting.findOne(customer.restaurantId ? { restaurantId: customer.restaurantId } : {});
+    customer.initDefaultRewards(settings);
     customer.evaluateRewards();
     const availableRewards = customer.rewards
       .filter(r => r.status === 'available')

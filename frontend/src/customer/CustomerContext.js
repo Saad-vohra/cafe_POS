@@ -39,6 +39,46 @@ export function CustomerProvider({ children }) {
   const [activeOrders, setActiveOrders] = useState([]);
   const [activeOrder, setActiveOrder] = useState(null);
   const [socket, setSocket] = useState(null);
+  const [loyaltySettings, setLoyaltySettings] = useState({
+    stampsPerCard: 8,
+    milestones: [
+      {
+        milestoneId: 'milestone_coffee_4',
+        requiredStamps: 4,
+        title: 'Free Coffee',
+        description: 'Get a complimentary freshly brewed espresso or cappuccino',
+        rewardType: 'free_item',
+        rewardValue: 0,
+        icon: '☕',
+        isActive: true
+      },
+      {
+        milestoneId: 'milestone_discount_8',
+        requiredStamps: 8,
+        title: '20% OFF',
+        description: 'Enjoy 20% off your entire dining bill',
+        rewardType: 'discount_percent',
+        rewardValue: 20,
+        icon: '🏷️',
+        isActive: true
+      }
+    ]
+  });
+
+  // Load loyalty program settings from backend on mount
+  useEffect(() => {
+    const loadLoyaltySettings = async () => {
+      try {
+        const res = await axios.get('/api/loyalty-settings');
+        if (res.data) {
+          setLoyaltySettings(res.data);
+        }
+      } catch (err) {
+        console.warn('Could not load dynamic loyalty settings:', err.message);
+      }
+    };
+    loadLoyaltySettings();
+  }, []);
 
   // Sync cart to localStorage
   useEffect(() => {
@@ -183,6 +223,21 @@ export function CustomerProvider({ children }) {
       socket.off('order-status-updated');
     };
   }, [socket, customer?._id, customer?.customerId, customer?.phone, activeOrder, tableNumber]);
+
+  // Real-time sync for loyalty settings updates from Admin
+  useEffect(() => {
+    if (!socket) return;
+    const handleSettingsUpdate = (newSettings) => {
+      if (newSettings) {
+        setLoyaltySettings(newSettings);
+        refreshCustomer();
+      }
+    };
+    socket.on('loyalty-settings-updated', handleSettingsUpdate);
+    return () => {
+      socket.off('loyalty-settings-updated', handleSettingsUpdate);
+    };
+  }, [socket]);
 
   // AUTO-POLLING & VISIBILITY SYNC
   // Keeps the stamp card ALWAYS fresh and syncs immediately when admin adds stamp
@@ -362,32 +417,37 @@ export function CustomerProvider({ children }) {
     return res.data;
   };
 
-  // Next reward milestone helper with repeatable card cycles
+  // Next reward milestone helper dynamically using Admin configured milestones and card size
   const getNextReward = () => {
     const totalStamps = customer?.totalStamps || 0;
-    const cardCycle = Math.floor(Math.max(0, totalStamps - 1) / 8) + 1;
-    const currentInCycle = totalStamps === 0 ? 0 : ((totalStamps - 1) % 8) + 1;
+    const stampsPerCard = loyaltySettings?.stampsPerCard || 8;
+    const activeMilestones = (loyaltySettings?.milestones || [])
+      .filter(m => m.isActive !== false)
+      .sort((a, b) => a.requiredStamps - b.requiredStamps);
 
-    if (currentInCycle < 4) {
+    const cardCycle = Math.floor(Math.max(0, totalStamps - 1) / stampsPerCard) + 1;
+    const currentInCycle = totalStamps === 0 ? 0 : ((totalStamps - 1) % stampsPerCard) + 1;
+
+    // Find next milestone in current card cycle
+    const nextMilestone = activeMilestones.find(m => m.requiredStamps > currentInCycle);
+
+    if (nextMilestone) {
       return {
         cardCycle,
-        rewardName: 'Free Coffee',
-        targetStamps: 4,
-        stampsNeeded: 4 - currentInCycle
-      };
-    } else if (currentInCycle < 8) {
-      return {
-        cardCycle,
-        rewardName: '20% OFF Entire Bill',
-        targetStamps: 8,
-        stampsNeeded: 8 - currentInCycle
+        rewardName: nextMilestone.title,
+        targetStamps: nextMilestone.requiredStamps,
+        stampsNeeded: nextMilestone.requiredStamps - currentInCycle,
+        icon: nextMilestone.icon || '🎁'
       };
     } else {
+      // Completed all milestones for this card
+      const highest = activeMilestones[activeMilestones.length - 1];
       return {
         cardCycle,
-        rewardName: '20% OFF Entire Bill',
-        targetStamps: 8,
-        stampsNeeded: 0
+        rewardName: highest ? highest.title : 'Card Complete!',
+        targetStamps: stampsPerCard,
+        stampsNeeded: 0,
+        icon: highest?.icon || '🎁'
       };
     }
   };
@@ -424,7 +484,9 @@ export function CustomerProvider({ children }) {
         logoutCustomer,
         fetchTableBill,
         processPayment,
-        getNextReward
+        getNextReward,
+        loyaltySettings,
+        setLoyaltySettings
       }}
     >
       {children}

@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useCustomer } from './CustomerContext';
 
 export default function CustomerHome() {
-  const { customer, tableNumber, activeOrder, refreshCustomer } = useCustomer();
+  const { customer, tableNumber, activeOrder, refreshCustomer, loyaltySettings } = useCustomer();
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -13,45 +13,25 @@ export default function CustomerHome() {
   }, []);
 
   const totalStamps = customer?.totalStamps || 0;
+  const stampsPerCard = loyaltySettings?.stampsPerCard || 8;
+  const activeMilestones = (loyaltySettings?.milestones || [])
+    .filter(m => m.isActive !== false)
+    .sort((a, b) => a.requiredStamps - b.requiredStamps);
 
-  // Repeatable 8-stamp card cycle:
-  // Card #1 = stamps 1..8
-  // Card #2 = stamps 9..16
-  // Card #3 = stamps 17..24
-  const cardCycle = Math.floor(Math.max(0, totalStamps - 1) / 8) + 1;
-  const currentCardStamps = totalStamps === 0 ? 0 : ((totalStamps - 1) % 8) + 1;
+  const cardCycle = Math.floor(Math.max(0, totalStamps - 1) / stampsPerCard) + 1;
+  const currentCardStamps = totalStamps === 0 ? 0 : ((totalStamps - 1) % stampsPerCard) + 1;
 
-  // Target 1: 4 stamps on current card = Free Coffee
-  // Target 2: 8 stamps on current card = 20% OFF
-  let nextRewardTitle = 'FREE Coffee';
-  let targetStamps = 4;
-  let remainingStamps = 4;
-  let milestoneUnlocked = false;
+  // Find next milestone on this card
+  const nextMilestone = activeMilestones.find(m => m.requiredStamps > currentCardStamps);
+  const currentMilestone = activeMilestones.find(m => m.requiredStamps === currentCardStamps);
 
-  if (currentCardStamps < 4) {
-    nextRewardTitle = 'FREE Coffee';
-    targetStamps = 4;
-    remainingStamps = 4 - currentCardStamps;
-    milestoneUnlocked = false;
-  } else if (currentCardStamps === 4) {
-    nextRewardTitle = 'FREE Coffee';
-    targetStamps = 4;
-    remainingStamps = 0;
-    milestoneUnlocked = true;
-  } else if (currentCardStamps < 8) {
-    nextRewardTitle = '20% OFF';
-    targetStamps = 8;
-    remainingStamps = 8 - currentCardStamps;
-    milestoneUnlocked = false;
-  } else {
-    nextRewardTitle = '20% OFF';
-    targetStamps = 8;
-    remainingStamps = 0;
-    milestoneUnlocked = true;
-  }
+  let nextRewardTitle = nextMilestone ? nextMilestone.title : (activeMilestones[activeMilestones.length - 1]?.title || 'Card Reward');
+  let targetStamps = nextMilestone ? nextMilestone.requiredStamps : stampsPerCard;
+  let remainingStamps = nextMilestone ? nextMilestone.requiredStamps - currentCardStamps : 0;
+  let milestoneUnlocked = !!currentMilestone;
 
-  // Active card always shows all 8 visual stamp bubbles
-  const stampSlots = [1, 2, 3, 4, 5, 6, 7, 8];
+  // Active card shows slots up to stampsPerCard
+  const stampSlots = Array.from({ length: stampsPerCard }, (_, i) => i + 1);
 
   return (
     <div>
@@ -94,7 +74,7 @@ export default function CustomerHome() {
             padding: '4px 10px',
             borderRadius: 20
           }}>
-            {currentCardStamps} / 8 Stamps {cardCycle > 1 ? `(Card #${cardCycle})` : ''}
+            {currentCardStamps} / {stampsPerCard} Stamps {cardCycle > 1 ? `(Card #${cardCycle})` : ''}
           </span>
         </div>
 
@@ -102,16 +82,18 @@ export default function CustomerHome() {
         <div className="stamp-progress-row">
           {stampSlots.map(num => {
             const isStamped = num <= currentCardStamps;
-            const isCoffeeSlot = num === 4;
-            const isDiscountSlot = num === 8;
+            const milestoneForNum = activeMilestones.find(m => m.requiredStamps === num);
+            const isMilestone = !!milestoneForNum;
+            const icon = milestoneForNum?.icon || (isMilestone ? '🎁' : num);
+
             return (
               <div
                 key={num}
-                className={`stamp-bubble ${isStamped ? 'filled' : ''} ${isCoffeeSlot || isDiscountSlot ? 'milestone' : ''}`}
+                className={`stamp-bubble ${isStamped ? 'filled' : ''} ${isMilestone ? 'milestone' : ''}`}
               >
                 {isStamped
-                  ? (isDiscountSlot ? '🎁' : isCoffeeSlot ? '☕' : '✓')
-                  : (isCoffeeSlot ? '☕' : isDiscountSlot ? '🎁' : num)}
+                  ? (isMilestone ? icon : '✓')
+                  : icon}
               </div>
             );
           })}
@@ -121,9 +103,9 @@ export default function CustomerHome() {
           <span style={{ fontSize: 12, color: '#5A6E62', fontWeight: 600 }}>
             {remainingStamps > 0
               ? `🔥 ${remainingStamps} more stamp${remainingStamps > 1 ? 's' : ''} to unlock your ${nextRewardTitle}!`
-              : currentCardStamps === 4
-                ? 'Next: Collect 8 stamps → Get 20% OFF'
-                : `🎉 Card #${cardCycle} Complete! Next stamp starts Card #${cardCycle + 1}`}
+              : currentCardStamps === stampsPerCard
+                ? `🎉 Card #${cardCycle} Complete! Next stamp starts Card #${cardCycle + 1}`
+                : `🎉 ${currentMilestone?.title || 'Reward'} Unlocked!`}
           </span>
           <span style={{ fontSize: 12, color: '#087F45', fontWeight: 700 }}>
             View Stamps →
