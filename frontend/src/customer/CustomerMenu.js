@@ -298,7 +298,7 @@ const CustomerMenu = () => {
       ) : (
         <div className="menu-grid">
           {filteredItems.map(item => {
-            const qty = getItemQuantity(item._id);
+            const qty = typeof getItemQuantity === 'function' ? getItemQuantity(item._id) : 0;
             const imageSrc = getFoodImage(item.name, item.category);
 
             return (

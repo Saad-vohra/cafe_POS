@@ -7,6 +7,7 @@ import AdminLayout from './pages/admin/AdminLayout';
 import WaiterLayout from './pages/waiter/WaiterLayout';
 import KitchenLayout from './pages/kitchen/KitchenLayout';
 import './index.css';
+import './customer/customer.css';
 
 // Customer Ordering & Loyalty App
 import { CustomerProvider } from './customer/CustomerContext';

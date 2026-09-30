@@ -1,6 +1,7 @@
 import React from 'react';
 import { Outlet, useNavigate, useLocation, Navigate } from 'react-router-dom';
 import { useCustomer } from './CustomerContext';
+import './customer.css';
 
 export default function CustomerLayout() {
   const { customer, tableNumber, cartCount, cartSubtotal } = useCustomer();

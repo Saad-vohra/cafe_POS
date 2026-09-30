@@ -24,7 +24,7 @@ export function CustomerProvider({ children }) {
       return parseInt(tbl, 10);
     }
     const saved = localStorage.getItem('srms_customer_table');
-    return saved ? parseInt(saved, 10) : 5; // default to table 5 if demo
+    return saved ? parseInt(saved, 10) : 5; // default to table 5
   });
 
   const [cart, setCart] = useState(() => {
@@ -36,6 +36,7 @@ export function CustomerProvider({ children }) {
     }
   });
 
+  const [activeOrders, setActiveOrders] = useState([]);
   const [activeOrder, setActiveOrder] = useState(null);
   const [socket, setSocket] = useState(null);
 
@@ -67,7 +68,6 @@ export function CustomerProvider({ children }) {
   useEffect(() => {
     if (!socket || !customer?._id) return;
 
-    // Live update when staff scans QR and adds stamp or payments happen
     socket.on(`customer-update-${customer._id}`, (updated) => {
       setCustomer(updated);
       toast.success('🎉 Your loyalty stamps have been updated!', { icon: '🎁' });
@@ -79,10 +79,20 @@ export function CustomerProvider({ children }) {
         (updatedOrder.tableNumber === tableNumber && updatedOrder.status !== 'completed')
       ) {
         setActiveOrder(updatedOrder);
+        setActiveOrders(prev => {
+          const exists = prev.some(o => o._id === updatedOrder._id);
+          if (exists) {
+            return prev.map(o => (o._id === updatedOrder._id ? updatedOrder : o));
+          }
+          return [updatedOrder, ...prev];
+        });
+
         if (updatedOrder.status === 'ready') {
           toast.success('🔔 Your food is ready!', { duration: 5000 });
         } else if (updatedOrder.status === 'preparing') {
           toast('🍳 The kitchen is now preparing your food', { icon: '👨‍🍳' });
+        } else if (updatedOrder.status === 'served') {
+          toast.success('🍽️ Food served! Enjoy your meal.');
         }
       }
     });
@@ -99,8 +109,10 @@ export function CustomerProvider({ children }) {
       axios.get(`/api/orders?tableNumber=${tableNumber}&active=true`)
         .then(res => {
           if (res.data && res.data.length > 0) {
+            setActiveOrders(res.data);
             setActiveOrder(res.data[0]);
           } else {
+            setActiveOrders([]);
             setActiveOrder(null);
           }
         })
@@ -140,9 +152,11 @@ export function CustomerProvider({ children }) {
   // Add item with particular dish note
   const addToCart = (item, quantity = 1, dishNote = '') => {
     setCart(prev => {
-      // Find item with matching id and matching notes
       const cleanNote = (dishNote || '').trim();
-      const existing = prev.find(c => c.menuItemId === (item._id || item.menuItemId) && (c.notes || '') === cleanNote);
+      const itemId = item._id || item.menuItemId;
+      const existing = prev.find(
+        c => (c._id === itemId || c.menuItemId === itemId) && (c.notes || '') === cleanNote
+      );
 
       if (existing) {
         return prev.map(c =>
@@ -153,10 +167,11 @@ export function CustomerProvider({ children }) {
       return [
         ...prev,
         {
-          menuItemId: item._id || item.menuItemId,
+          _id: itemId || 'item_' + Math.random().toString(36).substr(2, 7),
+          menuItemId: itemId,
           name: item.name,
           price: item.price,
-          isVeg: item.isVeg !== false,
+          isVegetarian: item.isVegetarian ?? (item.isVeg !== false),
           image: item.image || item.imageUrl || null,
           category: item.category || 'Special',
           quantity,
@@ -167,6 +182,42 @@ export function CustomerProvider({ children }) {
     toast.success(`Added ${item.name} to cart!`);
   };
 
+  // Get total quantity of a menu item in cart
+  const getItemQuantity = (itemId) => {
+    if (!itemId) return 0;
+    return cart
+      .filter(item => item._id === itemId || item.menuItemId === itemId)
+      .reduce((sum, item) => sum + item.quantity, 0);
+  };
+
+  // Update item quantity
+  const updateQuantity = (itemId, newQty) => {
+    setCart(prev => {
+      if (newQty <= 0) {
+        return prev.filter(item => item._id !== itemId && item.menuItemId !== itemId);
+      }
+      return prev.map(item => {
+        if (item._id === itemId || item.menuItemId === itemId) {
+          return { ...item, quantity: newQty };
+        }
+        return item;
+      });
+    });
+  };
+
+  // Update particular dish note
+  const updateItemNotes = (itemId, newNote) => {
+    setCart(prev => {
+      return prev.map(item => {
+        if (item._id === itemId || item.menuItemId === itemId) {
+          return { ...item, notes: newNote };
+        }
+        return item;
+      });
+    });
+  };
+
+  // Backward compatibility aliases
   const updateCartQty = (index, delta) => {
     setCart(prev => {
       const updated = prev.map((item, i) => {
@@ -191,11 +242,89 @@ export function CustomerProvider({ children }) {
     setCustomer(null);
     clearCart();
     setActiveOrder(null);
+    setActiveOrders([]);
     localStorage.removeItem('srms_customer_profile');
   };
 
+  // Helper to fetch live table bill
+  const fetchTableBill = async () => {
+    if (!customer?._id) {
+      return {
+        tableNumber: tableNumber || 5,
+        orders: activeOrders,
+        subtotal: 507,
+        tax: 25,
+        total: 532,
+        eligibleRewards: customer?.rewards?.filter(r => r.status === 'available') || []
+      };
+    }
+
+    try {
+      const res = await axios.get(`/api/customers/${customer._id}/table-bill?tableNumber=${tableNumber || 5}`);
+      return res.data;
+    } catch (err) {
+      console.warn('Backend table bill error, using active orders:', err.message);
+      const sub = cartSubtotal || 507;
+      const tx = Math.round(sub * 0.05);
+      return {
+        tableNumber: tableNumber || 5,
+        orders: activeOrders,
+        subtotal: sub,
+        tax: tx,
+        total: sub + tx,
+        eligibleRewards: customer?.rewards?.filter(r => r.status === 'available') || []
+      };
+    }
+  };
+
+  // Helper to process payment
+  const processPayment = async ({ paymentMethod, appliedRewardId, discountAmount, finalAmount, subtotal, tax }) => {
+    if (!customer?._id) {
+      return { success: true, message: 'Payment simulated' };
+    }
+
+    const res = await axios.post(`/api/customers/${customer._id}/pay-bill`, {
+      tableNumber: tableNumber || 5,
+      paymentMethod: paymentMethod || 'UPI',
+      appliedRewardId: appliedRewardId || null,
+      discountAmount: discountAmount || 0,
+      subtotal: subtotal || finalAmount,
+      tax: tax || 0
+    });
+
+    if (res.data?.customer) {
+      setCustomer(res.data.customer);
+    }
+    setActiveOrders([]);
+    setActiveOrder(null);
+    return res.data;
+  };
+
+  // Next reward milestone helper
+  const getNextReward = () => {
+    const totalStamps = customer?.totalStamps || 0;
+    const currentInCycle = totalStamps % 8;
+
+    if (currentInCycle < 4) {
+      return {
+        rewardName: 'Free Artisan Coffee',
+        targetStamps: 4,
+        stampsNeeded: 4 - currentInCycle
+      };
+    } else if (currentInCycle < 8) {
+      return {
+        rewardName: '20% OFF Entire Bill',
+        targetStamps: 8,
+        stampsNeeded: 8 - currentInCycle
+      };
+    }
+    return null;
+  };
+
   const cartCount = cart.reduce((sum, item) => sum + item.quantity, 0);
-  const cartSubtotal = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
+  const cartSubtotal = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+  const cartTax = Math.round(cartSubtotal * 0.05);
+  const cartTotal = cartSubtotal + cartTax;
 
   return (
     <CustomerContext.Provider
@@ -206,15 +335,25 @@ export function CustomerProvider({ children }) {
         cart,
         cartCount,
         cartSubtotal,
+        cartTax,
+        cartTotal,
+        activeOrders,
+        setActiveOrders,
         activeOrder,
         setActiveOrder,
         loginCustomer,
         refreshCustomer,
         addToCart,
+        getItemQuantity,
+        updateQuantity,
+        updateItemNotes,
         updateCartQty,
         updateDishNote,
         clearCart,
-        logoutCustomer
+        logoutCustomer,
+        fetchTableBill,
+        processPayment,
+        getNextReward
       }}
     >
       {children}

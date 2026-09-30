@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useCustomer } from './CustomerContext';
 import toast from 'react-hot-toast';
+import './customer.css';
 
 export default function CustomerLogin() {
   const navigate = useNavigate();
