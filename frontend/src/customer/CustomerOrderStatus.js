@@ -38,6 +38,42 @@ const CustomerOrderStatus = () => {
 
   const currentStep = getStepIndex(currentOrder?.status);
 
+  if (!currentOrder) {
+    return (
+      <div className="customer-page-content" style={{ textAlign: 'center', padding: '60px 20px' }}>
+        <div style={{
+          width: 80,
+          height: 80,
+          borderRadius: '50%',
+          background: '#EBF7EE',
+          color: '#087F45',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          fontSize: 38,
+          margin: '0 auto 16px'
+        }}>
+          👨‍🍳
+        </div>
+        <h3 style={{ fontSize: '1.35rem', fontWeight: 900, color: '#1A2E22', marginBottom: 8 }}>
+          No Active Order Yet
+        </h3>
+        <p style={{ color: '#64748B', fontSize: '0.9rem', maxWidth: 340, margin: '0 auto 20px', lineHeight: 1.4 }}>
+          You have no ongoing kitchen orders for Table {tableNumber || 5}. Browse our menu and order your favorite dishes!
+        </p>
+        <button
+          onClick={() => navigate('/customer/menu')}
+          className="btn-customer-primary"
+          style={{ width: 'auto', padding: '12px 28px' }}
+        >
+          🍽️ Browse Menu
+        </button>
+      </div>
+    );
+  }
+
+  const orderItemsTotal = currentOrder?.items?.reduce((sum, it) => sum + ((it.price || 0) * (it.quantity || 1)), 0) || currentOrder?.totalAmount || 0;
+
   return (
     <div className="customer-page-content">
       {/* If just placed, show celebration banner */}
@@ -113,7 +149,7 @@ const CustomerOrderStatus = () => {
               Order Reference
             </div>
             <div style={{ fontSize: '1.2rem', fontWeight: 800, color: '#1e293b' }}>
-              #{currentOrder?.orderNumber || (currentOrder?._id ? currentOrder._id.slice(-6).toUpperCase() : 'TJ1258')}
+              #{currentOrder?.orderNumber || (currentOrder?._id ? currentOrder._id.slice(-6).toUpperCase() : 'ORD')}
             </div>
             <div style={{ fontSize: '0.8rem', color: '#64748b', marginTop: 2 }}>
               Table {tableNumber || currentOrder?.tableNumber || 5} • {new Date(currentOrder?.createdAt || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
@@ -215,23 +251,16 @@ const CustomerOrderStatus = () => {
             textTransform: 'uppercase',
             marginBottom: 10
           }}>
-            Items in this order
+            Items in this order ({currentOrder?.items?.length || 0})
           </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {(currentOrder?.items && currentOrder.items.length > 0
-              ? currentOrder.items
-              : [
-                  { name: 'Margherita Pizza', quantity: 1, price: 249, notes: 'Crispy crust, less chilli' },
-                  { name: 'Coca Cola', quantity: 1, price: 79, notes: 'With ice & lemon slice' },
-                  { name: 'Veg Burger', quantity: 1, price: 179, notes: 'No mayo' }
-                ]
-            ).map((item, idx) => (
+            {(currentOrder?.items || []).map((item, idx) => (
               <div key={idx} style={{
                 display: 'flex',
                 justifyContent: 'space-between',
                 fontSize: '0.88rem',
-                borderBottom: idx !== (currentOrder?.items?.length || 3) - 1 ? '1px dashed #e2e8f0' : 'none',
+                borderBottom: idx !== (currentOrder?.items?.length - 1) ? '1px dashed #e2e8f0' : 'none',
                 paddingBottom: 6
               }}>
                 <div>
@@ -239,6 +268,11 @@ const CustomerOrderStatus = () => {
                     {item.name || item.menu?.name}
                   </span>
                   <span style={{ color: '#64748b', marginLeft: 6 }}>×{item.quantity}</span>
+                  {item.batchNumber > 1 && (
+                    <span style={{ fontSize: '0.72rem', background: '#DBEAFE', color: '#1E40AF', padding: '1px 6px', borderRadius: 4, marginLeft: 6, fontWeight: 700 }}>
+                      Round #{item.batchNumber}
+                    </span>
+                  )}
                   {item.notes && (
                     <div style={{ fontSize: '0.75rem', color: '#047857', fontWeight: 500, marginTop: 2 }}>
                       📝 {item.notes}
@@ -264,7 +298,7 @@ const CustomerOrderStatus = () => {
           }}>
             <span>Order Total</span>
             <span style={{ color: 'var(--primary-green)' }}>
-              ₹{currentOrder?.totalAmount || 532}
+              ₹{orderItemsTotal}
             </span>
           </div>
         </div>

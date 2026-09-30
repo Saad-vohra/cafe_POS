@@ -16,12 +16,16 @@ router.get('/', async (req, res) => {
 // 2. Admin: Update loyalty program settings (card stamps & reward milestones)
 router.put('/', async (req, res) => {
   try {
-    const { stampsPerCard, milestones, restaurantId } = req.body;
+    const { stampsPerCard, minSpendForStamp, milestones, restaurantId } = req.body;
 
     let settings = await LoyaltySetting.getOrCreateDefault(restaurantId);
 
     if (stampsPerCard && !isNaN(stampsPerCard)) {
       settings.stampsPerCard = Math.max(2, Math.min(24, parseInt(stampsPerCard, 10)));
+    }
+
+    if (minSpendForStamp !== undefined && !isNaN(minSpendForStamp)) {
+      settings.minSpendForStamp = Math.max(0, parseInt(minSpendForStamp, 10));
     }
 
     if (Array.isArray(milestones)) {

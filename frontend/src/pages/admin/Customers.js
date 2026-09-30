@@ -652,47 +652,78 @@ export default function Customers() {
                 </p>
               </div>
 
-              <div style={{ display: 'flex', alignItems: 'center', gap: 12, background: '#F8FAF8', padding: '12px 18px', borderRadius: 14, border: '1.5px solid #C7E3D0' }}>
-                <span style={{ fontWeight: 800, color: '#1A2E22', fontSize: '0.92rem' }}>
-                  Stamps per Card:
-                </span>
-                <input
-                  type="number"
-                  min="2"
-                  max="20"
-                  value={loyaltySettings.stampsPerCard || 8}
-                  onChange={(e) => {
-                    const val = parseInt(e.target.value, 10) || 8;
-                    setLoyaltySettings(prev => ({ ...prev, stampsPerCard: val }));
-                  }}
-                  style={{
-                    width: 70,
-                    height: 38,
-                    textAlign: 'center',
-                    fontWeight: 900,
-                    fontSize: '1.1rem',
-                    color: '#087F45',
-                    borderRadius: 10,
-                    border: '1.5px solid #087F45',
-                    background: '#FFFFFF'
-                  }}
-                />
-                <button
-                  onClick={() => handleSaveLoyaltySettings()}
-                  disabled={savingLoyalty}
-                  style={{
-                    background: '#087F45',
-                    color: '#FFFFFF',
-                    border: 'none',
-                    padding: '8px 16px',
-                    borderRadius: 10,
-                    fontWeight: 800,
-                    fontSize: '0.85rem',
-                    cursor: 'pointer'
-                  }}
-                >
-                  {savingLoyalty ? 'Saving...' : 'Update Size'}
-                </button>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12, background: '#F8FAF8', padding: '10px 16px', borderRadius: 14, border: '1.5px solid #C7E3D0' }}>
+                  <span style={{ fontWeight: 800, color: '#1A2E22', fontSize: '0.88rem' }}>
+                    Stamps per Card:
+                  </span>
+                  <input
+                    type="number"
+                    min="2"
+                    max="24"
+                    value={loyaltySettings.stampsPerCard || 8}
+                    onChange={(e) => {
+                      const val = parseInt(e.target.value, 10) || 8;
+                      setLoyaltySettings(prev => ({ ...prev, stampsPerCard: val }));
+                    }}
+                    style={{
+                      width: 65,
+                      height: 36,
+                      textAlign: 'center',
+                      fontWeight: 900,
+                      fontSize: '1rem',
+                      color: '#087F45',
+                      borderRadius: 10,
+                      border: '1.5px solid #087F45',
+                      background: '#FFFFFF'
+                    }}
+                  />
+                </div>
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12, background: '#F8FAF8', padding: '10px 16px', borderRadius: 14, border: '1.5px solid #C7E3D0' }}>
+                  <span style={{ fontWeight: 800, color: '#1A2E22', fontSize: '0.88rem' }}>
+                    Min Bill for 1 Stamp (₹):
+                  </span>
+                  <input
+                    type="number"
+                    min="0"
+                    step="50"
+                    placeholder="200"
+                    value={loyaltySettings.minSpendForStamp ?? 200}
+                    onChange={(e) => {
+                      const val = parseInt(e.target.value, 10) || 0;
+                      setLoyaltySettings(prev => ({ ...prev, minSpendForStamp: val }));
+                    }}
+                    style={{
+                      width: 85,
+                      height: 36,
+                      textAlign: 'center',
+                      fontWeight: 900,
+                      fontSize: '1rem',
+                      color: '#087F45',
+                      borderRadius: 10,
+                      border: '1.5px solid #087F45',
+                      background: '#FFFFFF'
+                    }}
+                  />
+                  <button
+                    onClick={() => handleSaveLoyaltySettings()}
+                    disabled={savingLoyalty}
+                    style={{
+                      background: '#087F45',
+                      color: '#FFFFFF',
+                      border: 'none',
+                      padding: '8px 16px',
+                      borderRadius: 10,
+                      fontWeight: 800,
+                      fontSize: '0.85rem',
+                      cursor: 'pointer',
+                      whiteSpace: 'nowrap'
+                    }}
+                  >
+                    {savingLoyalty ? 'Saving...' : '💾 Save Settings'}
+                  </button>
+                </div>
               </div>
             </div>
           </div>

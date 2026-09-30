@@ -229,6 +229,66 @@ router.post('/', optionalAuth, async (req, res) => {
     const customerName = req.body.customerName || customerDoc?.name || (isTakeaway ? 'Takeaway Customer' : `Table ${tableNum || 5} Customer`);
     const customerPhone = req.body.customerPhone || customerDoc?.phone || '';
 
+    // Check if an active non-completed order already exists for this table
+    let existingOrder = null;
+    if (!isTakeaway && tableNum) {
+      existingOrder = await Order.findOne({
+        tableNumber: tableNum,
+        status: { $nin: ['completed', 'cancelled'] },
+        ...(restaurantId ? { restaurantId } : {})
+      }).sort({ createdAt: -1 });
+    }
+
+    if (existingOrder) {
+      // Append items to the existing order as a new batch!
+      const nextBatch = (existingOrder.batchCount || 1) + 1;
+      const batchItems = items.map(it => ({
+        ...it,
+        batchNumber: nextBatch,
+        served: false,
+        addedAt: now
+      }));
+
+      existingOrder.items.push(...batchItems);
+      existingOrder.batchCount = nextBatch;
+      if (req.body.notes) {
+        existingOrder.notes = existingOrder.notes
+          ? `${existingOrder.notes} | ${req.body.notes}`
+          : req.body.notes;
+      }
+      // If order was already served or ready, reset to preparing so kitchen sees new food to prepare
+      if (existingOrder.status === 'served' || existingOrder.status === 'ready') {
+        existingOrder.status = 'preparing';
+      }
+
+      await existingOrder.save();
+
+      // Ensure customer has link to this order
+      if (customerDoc && !customerDoc.orders.includes(existingOrder._id)) {
+        customerDoc.orders.push(existingOrder._id);
+        customerDoc.activeTable = tableNum;
+        await customerDoc.save();
+      }
+
+      // Socket broadcasts
+      const io = req.app.get('io');
+      if (io) {
+        const room = `restaurant-${restaurantId}`;
+        const kitchenRoom = `kitchen-${restaurantId}`;
+        io.to(kitchenRoom).emit('order-updated', existingOrder);
+        io.to(kitchenRoom).emit('new-order', existingOrder);
+        io.emit('order-status-updated', existingOrder);
+        io.to(room).emit('order-updated', existingOrder);
+        io.emit('table-updated');
+        if (customerDoc) {
+          io.emit(`customer-order-created-${customerDoc._id}`, existingOrder);
+        }
+      }
+
+      return res.status(200).json(existingOrder);
+    }
+
+    // No existing active order: Create new initial order
     const orderData = {
       restaurantId,
       orderType: isTakeaway ? 'takeaway' : 'dine_in',

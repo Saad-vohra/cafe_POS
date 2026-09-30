@@ -31,8 +31,9 @@ const CustomerBillPay = () => {
   };
 
   // Base amounts
-  const subtotal = billData?.subtotal || 507;
-  const tax = billData?.tax || billData?.gstAmount || 25;
+  const hasActiveBill = Boolean(billData?.hasActiveOrder && (billData?.total > 0 || billData?.totalAmount > 0));
+  const subtotal = billData?.subtotal || 0;
+  const tax = billData?.tax || billData?.gstAmount || 0;
   const baseTotal = billData?.total || billData?.totalAmount || (subtotal + tax);
 
   // Calculate discount based on chosen reward
@@ -81,24 +82,7 @@ const CustomerBillPay = () => {
       ? billData.availableRewards
       : (customer?.rewards && customer.rewards.filter(r => r.status === 'available').length > 0)
       ? customer.rewards.filter(r => r.status === 'available')
-      : [
-          {
-            rewardId: 'rew_coffee_4',
-            title: 'Free Coffee',
-            name: 'Free Coffee',
-            description: 'Get a complimentary freshly brewed espresso or cappuccino',
-            rewardType: 'free_item',
-            rewardValue: 0
-          },
-          {
-            rewardId: 'rew_discount_8',
-            title: '20% OFF',
-            name: '20% OFF',
-            description: 'Enjoy 20% off your entire dining bill',
-            rewardType: 'discount_percent',
-            rewardValue: 20
-          }
-        ]
+      : []
   );
 
   const handleProceedToPayment = async () => {
@@ -146,6 +130,49 @@ const CustomerBillPay = () => {
       setIsProcessing(false);
     }
   };
+
+  if (!loading && (!hasActiveBill || baseTotal === 0)) {
+    return (
+      <div className="customer-page-content" style={{ textAlign: 'center', padding: '60px 20px' }}>
+        <div style={{
+          width: 80,
+          height: 80,
+          borderRadius: '50%',
+          background: '#EBF7EE',
+          color: '#087F45',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          fontSize: 38,
+          margin: '0 auto 16px'
+        }}>
+          🧾
+        </div>
+        <h3 style={{ fontSize: '1.4rem', fontWeight: 900, color: '#1A2E22', marginBottom: 8 }}>
+          No Active Bill to Pay
+        </h3>
+        <p style={{ color: '#64748B', fontSize: '0.92rem', maxWidth: 360, margin: '0 auto 24px', lineHeight: 1.5 }}>
+          All orders for Table {tableNumber || 5} have been settled or no active orders have been placed yet. Thank you for dining with us!
+        </p>
+        <div style={{ display: 'flex', gap: 12, justifyContent: 'center' }}>
+          <button
+            onClick={() => navigate('/customer/menu')}
+            className="btn-customer-primary"
+            style={{ width: 'auto', padding: '12px 24px' }}
+          >
+            🍽️ Browse Menu
+          </button>
+          <button
+            onClick={() => navigate('/customer/rewards')}
+            className="btn-customer-secondary"
+            style={{ width: 'auto', padding: '12px 24px' }}
+          >
+            🎁 View Rewards
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="customer-page-content">

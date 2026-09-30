@@ -33,6 +33,10 @@ router.post('/', auth, adminOnly, async (req, res) => {
 
     const item = new MenuItem({ ...req.body, name: trimmedName, restaurantId: req.restaurantId });
     await item.save();
+
+    const io = req.app.get('io');
+    if (io) io.emit('menu-updated', item);
+
     res.status(201).json(item);
   } catch (err) {
     res.status(400).json({ message: err.message });
@@ -60,6 +64,10 @@ router.put('/:id', auth, adminOnly, async (req, res) => {
 
     const item = await MenuItem.findOneAndUpdate({ _id: req.params.id, restaurantId: req.restaurantId }, update, { new: true });
     if (!item) return res.status(404).json({ message: 'Item not found' });
+
+    const io = req.app.get('io');
+    if (io) io.emit('menu-updated', item);
+
     res.json(item);
   } catch (err) {
     res.status(400).json({ message: err.message });
@@ -69,6 +77,10 @@ router.put('/:id', auth, adminOnly, async (req, res) => {
 router.delete('/:id', auth, adminOnly, async (req, res) => {
   try {
     await MenuItem.findOneAndDelete({ _id: req.params.id, restaurantId: req.restaurantId });
+
+    const io = req.app.get('io');
+    if (io) io.emit('menu-updated');
+
     res.json({ message: 'Item deleted' });
   } catch (err) {
     res.status(500).json({ message: err.message });

@@ -320,6 +320,12 @@ router.get('/:id/table-bill', async (req, res) => {
       return res.json({
         hasActiveOrder: false,
         message: `No active order found for Table ${tableNum}`,
+        subtotal: 0,
+        tax: 0,
+        total: 0,
+        totalAmount: 0,
+        orders: [],
+        items: [],
         customer
       });
     }
@@ -497,16 +503,27 @@ router.post('/:id/pay-bill', async (req, res) => {
       );
     }
 
-    // Award +1 loyalty stamp for completing eligible paid visit
+    // Award +1 loyalty stamp only if bill total satisfies admin-configured minimum spend
+    const LoyaltySetting = require('../models/LoyaltySetting');
+    const loyaltySettings = await LoyaltySetting.getOrCreateDefault(order.restaurantId);
+    const minSpend = loyaltySettings.minSpendForStamp !== undefined ? loyaltySettings.minSpendForStamp : 200;
+
     const oldStamps = customer.totalStamps;
-    customer.totalStamps += 1;
+    let stampEarned = 0;
+    if (bill.totalAmount >= minSpend) {
+      customer.totalStamps += 1;
+      stampEarned = 1;
+    }
+
     customer.orders.push(order._id);
     customer.activeTable = null;
-    customer.initDefaultRewards();
+    customer.initDefaultRewards(loyaltySettings);
     customer.evaluateRewards();
     await customer.save();
 
-    const newlyUnlocked = customer.rewards.filter(r => r.status === 'available' && oldStamps < r.requiredStamps);
+    const newlyUnlocked = stampEarned > 0
+      ? customer.rewards.filter(r => r.status === 'available' && oldStamps < r.requiredStamps)
+      : [];
 
     // Socket broadcasts
     const io = req.app.get('io');
@@ -520,11 +537,13 @@ router.post('/:id/pay-bill', async (req, res) => {
 
     res.json({
       success: true,
-      message: 'Payment completed successfully!',
+      message: stampEarned > 0
+        ? `Payment completed! +1 Loyalty Stamp awarded (Total: ${customer.totalStamps})`
+        : `Payment completed! (Spend ₹${minSpend} or more to earn loyalty stamps)`,
       bill,
       order,
       customer,
-      stampEarned: 1,
+      stampEarned,
       totalStamps: customer.totalStamps,
       newlyUnlocked
     });

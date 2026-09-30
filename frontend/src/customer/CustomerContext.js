@@ -147,6 +147,26 @@ export function CustomerProvider({ children }) {
     }
   };
 
+  const refreshActiveOrders = async () => {
+    try {
+      const tbl = tableNumber || 5;
+      const res = await axios.get(`/api/orders?tableNumber=${tbl}&active=true`);
+      if (res.data && res.data.length > 0) {
+        setActiveOrders(res.data);
+        setActiveOrder(res.data[0]);
+      } else {
+        setActiveOrders([]);
+        setActiveOrder(null);
+      }
+    } catch (err) {
+      // ignore
+    }
+  };
+
+  useEffect(() => {
+    refreshActiveOrders();
+  }, [tableNumber]);
+
   // Listen to customer profile updates & order status
   useEffect(() => {
     if (!socket || !customer) return;
@@ -367,12 +387,13 @@ export function CustomerProvider({ children }) {
   const fetchTableBill = async () => {
     if (!customer?._id) {
       return {
+        hasActiveOrder: false,
         tableNumber: tableNumber || 5,
-        orders: activeOrders,
-        subtotal: 507,
-        tax: 25,
-        total: 532,
-        eligibleRewards: customer?.rewards?.filter(r => r.status === 'available') || []
+        orders: [],
+        subtotal: 0,
+        tax: 0,
+        total: 0,
+        eligibleRewards: []
       };
     }
 
@@ -380,16 +401,15 @@ export function CustomerProvider({ children }) {
       const res = await axios.get(`/api/customers/${customer._id}/table-bill?tableNumber=${tableNumber || 5}`);
       return res.data;
     } catch (err) {
-      console.warn('Backend table bill error, using active orders:', err.message);
-      const sub = cartSubtotal || 507;
-      const tx = Math.round(sub * 0.05);
+      console.warn('Backend table bill error:', err.message);
       return {
+        hasActiveOrder: false,
         tableNumber: tableNumber || 5,
-        orders: activeOrders,
-        subtotal: sub,
-        tax: tx,
-        total: sub + tx,
-        eligibleRewards: customer?.rewards?.filter(r => r.status === 'available') || []
+        orders: [],
+        subtotal: 0,
+        tax: 0,
+        total: 0,
+        eligibleRewards: []
       };
     }
   };

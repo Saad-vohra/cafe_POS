@@ -4,142 +4,28 @@ import { useCustomer } from './CustomerContext';
 import { getFoodImage } from './foodImages';
 import FoodDetailModal from './FoodDetailModal';
 import axios from 'axios';
+import { io } from 'socket.io-client';
 
-const CATEGORIES = [
+const DEFAULT_CATEGORIES = [
   { id: 'all', label: 'All Items', icon: '🍽️' },
   { id: 'Starters', label: 'Starters', icon: '🥟' },
-  { id: 'Main Course', label: 'Main Course', icon: '🍛' },
+  { id: 'Main Course', label: 'Main Course', icon: '🍲' },
   { id: 'Pizza', label: 'Pizza', icon: '🍕' },
   { id: 'Burgers', label: 'Burgers', icon: '🍔' },
   { id: 'Beverages', label: 'Beverages', icon: '🥤' },
   { id: 'Desserts', label: 'Desserts', icon: '🍰' }
 ];
 
-// Fallback high quality dishes if backend menu is empty
-const DEFAULT_MENU_ITEMS = [
-  {
-    _id: 'def_p1',
-    name: 'Margherita Pizza',
-    category: 'Pizza',
-    price: 249,
-    description: 'Classic stone-baked pizza with San Marzano tomatoes, fresh buffalo mozzarella, and aromatic basil.',
-    isVegetarian: true,
-    isAvailable: true
-  },
-  {
-    _id: 'def_p2',
-    name: 'Farmhouse Supreme Pizza',
-    category: 'Pizza',
-    price: 329,
-    description: 'Crisp capsicum, sweet corn, button mushrooms, black olives, and melted double cheese.',
-    isVegetarian: true,
-    isAvailable: true
-  },
-  {
-    _id: 'def_b1',
-    name: 'Veg Burger',
-    category: 'Burgers',
-    price: 179,
-    description: 'Crispy herb potato patty topped with sliced vine tomatoes, gherkins, and house special sauce.',
-    isVegetarian: true,
-    isAvailable: true
-  },
-  {
-    _id: 'def_b2',
-    name: 'Double Cheese Crunch Burger',
-    category: 'Burgers',
-    price: 229,
-    description: 'Double crunchy patty layered with sharp cheddar cheese, caramelized onions, and smoky aioli.',
-    isVegetarian: true,
-    isAvailable: true
-  },
-  {
-    _id: 'def_m1',
-    name: 'Pasta Alfredo',
-    category: 'Main Course',
-    price: 229,
-    description: 'Fettuccine pasta tossed in a velvety garlic and Parmesan white cream sauce, finished with parsley.',
-    isVegetarian: true,
-    isAvailable: true
-  },
-  {
-    _id: 'def_m2',
-    name: 'Paneer Butter Masala',
-    category: 'Main Course',
-    price: 289,
-    description: 'Tender cottage cheese cubes simmered in a silky, mildly spiced tomato and cashew butter gravy.',
-    isVegetarian: true,
-    isAvailable: true
-  },
-  {
-    _id: 'def_s1',
-    name: 'Crispy Veg Spring Rolls',
-    category: 'Starters',
-    price: 189,
-    description: 'Golden rolls packed with shredded wok-tossed cabbage, carrots, and glass noodles with sweet chili dip.',
-    isVegetarian: true,
-    isAvailable: true
-  },
-  {
-    _id: 'def_s2',
-    name: 'Chilli Paneer Dry',
-    category: 'Starters',
-    price: 249,
-    description: 'Wok-tossed paneer cubes with bell peppers, spring onions, green chilies, and tangy soy glaze.',
-    isVegetarian: true,
-    isAvailable: true
-  },
-  {
-    _id: 'def_bev1',
-    name: 'Fresh Mint Mojito',
-    category: 'Beverages',
-    price: 149,
-    description: 'Refreshing crushed fresh mint leaves, zesty lime wedges, sparkling soda, and cane sugar.',
-    isVegetarian: true,
-    isAvailable: true
-  },
-  {
-    _id: 'def_bev2',
-    name: 'Cold Coffee with Ice Cream',
-    category: 'Beverages',
-    price: 169,
-    description: 'Rich blended espresso, chilled whole milk, topped with a luscious scoop of vanilla bean ice cream.',
-    isVegetarian: true,
-    isAvailable: true
-  },
-  {
-    _id: 'def_d1',
-    name: 'Sizzling Chocolate Brownie',
-    category: 'Desserts',
-    price: 199,
-    description: 'Warm fudgy Belgian chocolate brownie served with hot chocolate fudge and vanilla ice cream.',
-    isVegetarian: true,
-    isAvailable: true
-  },
-  {
-    _id: 'def_d2',
-    name: 'Gulab Jamun with Rabdi',
-    category: 'Desserts',
-    price: 159,
-    description: 'Golden fried milk dumplings steeped in saffron cardamom syrup served on chilled thickened rabdi.',
-    isVegetarian: true,
-    isAvailable: true
-  }
-];
-
-const CustomerMenu = () => {
+export default function CustomerMenu() {
   const navigate = useNavigate();
-  const { cart, getItemQuantity, addToCart } = useCustomer();
+  const { cart, getItemQuantity, addToCart, updateQuantity } = useCustomer();
   const [menuItems, setMenuItems] = useState([]);
+  const [categories, setCategories] = useState(DEFAULT_CATEGORIES);
   const [loading, setLoading] = useState(true);
   const [selectedCategory, setSelectedCategory] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [filterVegOnly, setFilterVegOnly] = useState(false);
   const [activeModalItem, setActiveModalItem] = useState(null);
-
-  useEffect(() => {
-    fetchMenu();
-  }, []);
 
   const fetchMenu = async () => {
     try {
@@ -147,18 +33,50 @@ const CustomerMenu = () => {
       const res = await axios.get('/api/menu');
       if (res.data && res.data.length > 0) {
         setMenuItems(res.data);
-      } else {
-        setMenuItems(DEFAULT_MENU_ITEMS);
       }
     } catch (err) {
-      console.warn('Using default menu items:', err.message);
-      setMenuItems(DEFAULT_MENU_ITEMS);
+      console.warn('Error fetching menu items:', err.message);
     } finally {
       setLoading(false);
     }
   };
 
+  const fetchCategories = async () => {
+    try {
+      const res = await axios.get('/api/categories');
+      if (res.data && res.data.length > 0) {
+        const dynamicCats = [
+          { id: 'all', label: 'All Items', icon: '🍽️' },
+          ...res.data.map(c => ({
+            id: c.name,
+            label: c.name,
+            icon: c.icon || '🍽️'
+          }))
+        ];
+        setCategories(dynamicCats);
+      }
+    } catch (err) {
+      console.warn('Error fetching categories:', err.message);
+    }
+  };
+
+  useEffect(() => {
+    fetchMenu();
+    fetchCategories();
+
+    const socket = io(process.env.REACT_APP_API_URL || 'http://localhost:5000', {
+      transports: ['websocket', 'polling']
+    });
+
+    socket.on('menu-updated', () => fetchMenu());
+    socket.on('categories-updated', () => fetchCategories());
+
+    return () => socket.disconnect();
+  }, []);
+
   const filteredItems = menuItems.filter(item => {
+    const isVeg = item.isVegetarian ?? item.isVeg ?? true;
+
     const matchesCategory =
       selectedCategory === 'all' ||
       (item.category && item.category.toLowerCase() === selectedCategory.toLowerCase());
@@ -168,84 +86,93 @@ const CustomerMenu = () => {
       item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       (item.description && item.description.toLowerCase().includes(searchQuery.toLowerCase()));
 
-    const matchesVeg = !filterVegOnly || item.isVegetarian;
+    const matchesVeg = !filterVegOnly || isVeg;
 
     return matchesCategory && matchesSearch && matchesVeg;
   });
 
   return (
     <div className="customer-page-content">
-      {/* Search & Veg Filter */}
-      <div style={{ marginBottom: 16 }}>
-        <div style={{ position: 'relative', marginBottom: 12 }}>
-          <span style={{ position: 'absolute', left: 14, top: 12, fontSize: 16 }}>🔍</span>
-          <input
-            type="text"
-            className="input-field"
-            style={{ paddingLeft: 40, height: 44, fontSize: '0.92rem' }}
-            placeholder="Search pizza, pasta, burger, coffee..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-          />
-          {searchQuery && (
-            <button
-              onClick={() => setSearchQuery('')}
-              style={{
-                position: 'absolute',
-                right: 12,
-                top: 10,
-                background: 'none',
-                border: 'none',
-                fontSize: 16,
-                cursor: 'pointer',
-                color: '#94a3b8'
-              }}
-            >
-              ✕
-            </button>
-          )}
-        </div>
-
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <span style={{ fontSize: '0.85rem', color: '#64748b', fontWeight: 600 }}>
-            {filteredItems.length} {filteredItems.length === 1 ? 'Dish' : 'Dishes'} Available
-          </span>
+      {/* Search Bar */}
+      <div style={{ position: 'relative', marginBottom: 14 }}>
+        <span style={{ position: 'absolute', left: 14, top: 12, fontSize: 16 }}>🔍</span>
+        <input
+          type="text"
+          className="input-field"
+          style={{ paddingLeft: 40, height: 44, fontSize: '0.92rem' }}
+          placeholder="Search dishes, drinks, desserts..."
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+        />
+        {searchQuery && (
           <button
-            onClick={() => setFilterVegOnly(!filterVegOnly)}
+            onClick={() => setSearchQuery('')}
             style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: 6,
-              padding: '6px 12px',
-              borderRadius: 20,
-              border: filterVegOnly ? '1.5px solid var(--primary-green)' : '1px solid #e2e8f0',
-              background: filterVegOnly ? 'var(--light-green)' : '#ffffff',
-              color: filterVegOnly ? 'var(--primary-green)' : '#64748b',
-              fontWeight: 700,
-              fontSize: '0.78rem',
+              position: 'absolute',
+              right: 12,
+              top: 10,
+              background: 'none',
+              border: 'none',
+              fontSize: 16,
               cursor: 'pointer',
-              transition: 'all 0.2s'
+              color: '#94a3b8'
             }}
           >
-            <span style={{
-              width: 10,
-              height: 10,
-              borderRadius: 2,
-              border: '2px solid #16a34a',
-              display: 'inline-flex',
-              alignItems: 'center',
-              justifyContent: 'center'
-            }}>
-              <span style={{ width: 4, height: 4, borderRadius: '50%', background: '#16a34a' }}></span>
-            </span>
-            Pure Veg
+            ✕
           </button>
-        </div>
+        )}
       </div>
 
-      {/* Category Pills Slider */}
-      <div className="category-scroll">
-        {CATEGORIES.map(cat => {
+      {/* Dishes Count & Pure Veg Filter as in Image */}
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        marginBottom: 14,
+        padding: '0 2px'
+      }}>
+        <span style={{ fontSize: '0.95rem', color: '#475569', fontWeight: 700 }}>
+          {filteredItems.length} {filteredItems.length === 1 ? 'Dish' : 'Dishes'} Available
+        </span>
+
+        <button
+          onClick={() => setFilterVegOnly(!filterVegOnly)}
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 8,
+            padding: '6px 14px',
+            borderRadius: 22,
+            border: filterVegOnly ? '1.5px solid #087F45' : '1.5px solid #CBD5E1',
+            background: filterVegOnly ? '#EBF7EE' : '#FFFFFF',
+            color: filterVegOnly ? '#087F45' : '#475569',
+            fontWeight: 800,
+            fontSize: '0.82rem',
+            cursor: 'pointer',
+            boxShadow: '0 1px 4px rgba(0,0,0,0.04)',
+            transition: 'all 0.2s'
+          }}
+        >
+          {/* Veg Square Dot Icon */}
+          <span style={{
+            width: 13,
+            height: 13,
+            borderRadius: 3,
+            border: '2px solid #16A34A',
+            display: 'inline-flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            background: '#FFFFFF'
+          }}>
+            <span style={{ width: 5, height: 5, borderRadius: '50%', background: '#16A34A' }}></span>
+          </span>
+          Pure Veg
+        </button>
+      </div>
+
+      {/* Category Horizontal Pills Slider */}
+      <div className="category-scroll" style={{ marginBottom: 18 }}>
+        {categories.map(cat => {
           const isActive = selectedCategory.toLowerCase() === cat.id.toLowerCase();
           return (
             <div
@@ -272,123 +199,220 @@ const CustomerMenu = () => {
             margin: '0 auto 12px',
             animation: 'spin 0.8s linear infinite'
           }}></div>
-          Loading gourmet menu...
+          Loading delicious menu...
         </div>
       ) : filteredItems.length === 0 ? (
         <div style={{
           textAlign: 'center',
           padding: '48px 20px',
           background: '#ffffff',
-          borderRadius: 18,
+          borderRadius: 20,
           border: '1px solid #f1f5f9'
         }}>
           <div style={{ fontSize: 42, marginBottom: 12 }}>🍽️</div>
-          <h4 style={{ fontWeight: 700, color: '#1e293b', marginBottom: 6 }}>No dishes found</h4>
+          <h4 style={{ fontWeight: 800, color: '#1e293b', marginBottom: 6 }}>No dishes found</h4>
           <p style={{ color: '#64748b', fontSize: '0.88rem', marginBottom: 16 }}>
-            Try searching for something else or reset filters
+            Try selecting another category or turn off the Pure Veg filter.
           </p>
           <button
             className="btn-customer-secondary"
             onClick={() => { setSelectedCategory('all'); setSearchQuery(''); setFilterVegOnly(false); }}
-            style={{ width: 'auto', padding: '8px 18px' }}
+            style={{ width: 'auto', padding: '8px 20px' }}
           >
             Show All Dishes
           </button>
         </div>
       ) : (
-        <div className="menu-grid">
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
           {filteredItems.map(item => {
+            const isVeg = item.isVegetarian ?? item.isVeg ?? true;
             const qty = typeof getItemQuantity === 'function' ? getItemQuantity(item._id) : 0;
-            const imageSrc = getFoodImage(item.name, item.category);
+            const imageSrc = item.image || getFoodImage(item.name, item.category);
 
             return (
               <div
                 key={item._id}
-                className="food-card"
+                style={{
+                  display: 'flex',
+                  background: '#FFFFFF',
+                  borderRadius: 20,
+                  border: '1px solid #E2E8F0',
+                  boxShadow: '0 2px 8px rgba(0,0,0,0.03)',
+                  overflow: 'hidden',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s',
+                  padding: 12,
+                  gap: 14,
+                  alignItems: 'center'
+                }}
                 onClick={() => setActiveModalItem(item)}
               >
-                <div style={{ position: 'relative' }}>
+                {/* Image Container with floating Veg/Non-Veg Tag */}
+                <div style={{ position: 'relative', width: 110, height: 110, flexShrink: 0 }}>
                   <img
                     src={imageSrc}
                     alt={item.name}
-                    className="food-card-img"
+                    style={{
+                      width: '100%',
+                      height: '100%',
+                      objectFit: 'cover',
+                      borderRadius: 16
+                    }}
                     loading="lazy"
                   />
-                  {/* Veg indicator badge */}
+
+                  {/* Veg / Non-Veg Tag Floating at top-left as shown in image */}
                   <div
                     style={{
                       position: 'absolute',
-                      top: 10,
-                      left: 10,
-                      background: 'rgba(255,255,255,0.92)',
+                      top: 6,
+                      left: 6,
+                      background: 'rgba(255, 255, 255, 0.96)',
                       backdropFilter: 'blur(4px)',
-                      padding: '3px 6px',
+                      padding: '2px 6px',
                       borderRadius: 6,
                       display: 'flex',
                       alignItems: 'center',
                       gap: 4,
-                      fontSize: '0.68rem',
-                      fontWeight: 700,
-                      color: item.isVegetarian ? '#15803d' : '#b91c1c',
-                      boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+                      boxShadow: '0 2px 5px rgba(0,0,0,0.18)',
+                      border: '1px solid rgba(0,0,0,0.06)'
                     }}
                   >
                     <span style={{
-                      width: 10,
-                      height: 10,
+                      width: 11,
+                      height: 11,
                       borderRadius: 2,
-                      border: `1.5px solid ${item.isVegetarian ? '#16a34a' : '#ef4444'}`,
+                      border: `1.5px solid ${isVeg ? '#16A34A' : '#DC2626'}`,
                       display: 'inline-flex',
                       alignItems: 'center',
-                      justifyContent: 'center'
+                      justifyContent: 'center',
+                      background: '#FFFFFF'
                     }}>
                       <span style={{
                         width: 4,
                         height: 4,
                         borderRadius: '50%',
-                        background: item.isVegetarian ? '#16a34a' : '#ef4444'
+                        background: isVeg ? '#16A34A' : '#DC2626'
                       }}></span>
                     </span>
-                    {item.isVegetarian ? 'VEG' : 'NON-VEG'}
-                  </div>
 
-                  {/* Quantity badge if in cart */}
-                  {qty > 0 && (
-                    <div style={{
-                      position: 'absolute',
-                      top: 10,
-                      right: 10,
-                      background: 'var(--primary-green)',
-                      color: '#ffffff',
-                      fontWeight: 800,
-                      fontSize: '0.75rem',
-                      padding: '3px 8px',
-                      borderRadius: 12,
-                      boxShadow: '0 2px 6px rgba(8,127,69,0.3)'
+                    <span style={{
+                      fontSize: '0.62rem',
+                      fontWeight: 900,
+                      color: isVeg ? '#16A34A' : '#DC2626',
+                      letterSpacing: '0.3px',
+                      textTransform: 'uppercase'
                     }}>
-                      {qty} in cart
-                    </div>
-                  )}
+                      {isVeg ? 'VEG' : 'NON-VEG'}
+                    </span>
+                  </div>
                 </div>
 
-                <div className="food-card-body">
-                  <div className="food-title">{item.name}</div>
-                  <div className="food-desc">
-                    {item.description || 'Delicious freshly prepared dish with premium restaurant ingredients.'}
+                {/* Dish Info on the Right */}
+                <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', justifyContent: 'space-between', height: '100%', gap: 6 }}>
+                  <div>
+                    <h3 style={{
+                      fontSize: '1.05rem',
+                      fontWeight: 800,
+                      color: '#1E293B',
+                      margin: '0 0 4px 0',
+                      lineHeight: 1.25
+                    }}>
+                      {item.name}
+                    </h3>
+                    <p style={{
+                      fontSize: '0.82rem',
+                      color: '#64748B',
+                      margin: 0,
+                      lineHeight: 1.35,
+                      display: '-webkit-box',
+                      WebkitLineClamp: 2,
+                      WebkitBoxOrient: 'vertical',
+                      overflow: 'hidden'
+                    }}>
+                      {item.description || 'Delicious gourmet chef specialty dish.'}
+                    </p>
                   </div>
 
-                  <div className="food-footer">
-                    <div className="food-price">₹{item.price}</div>
+                  {/* Price & Add Button Row */}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 4 }}>
+                    <span style={{
+                      fontSize: '1.18rem',
+                      fontWeight: 900,
+                      color: '#087F45'
+                    }}>
+                      ₹{item.price}
+                    </span>
 
-                    <button
-                      className="btn-add-food"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setActiveModalItem(item);
-                      }}
-                    >
-                      {qty > 0 ? `Edit (${qty})` : '+ Add'}
-                    </button>
+                    {qty > 0 ? (
+                      <div
+                        onClick={(e) => e.stopPropagation()}
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: 8,
+                          background: '#EBF7EE',
+                          border: '1.5px solid #087F45',
+                          borderRadius: 20,
+                          padding: '4px 10px'
+                        }}
+                      >
+                        <button
+                          onClick={() => updateQuantity(item._id, qty - 1)}
+                          style={{
+                            background: 'none',
+                            border: 'none',
+                            color: '#087F45',
+                            fontWeight: 900,
+                            fontSize: '1rem',
+                            cursor: 'pointer',
+                            padding: '0 4px'
+                          }}
+                        >
+                          −
+                        </button>
+                        <span style={{ fontWeight: 800, fontSize: '0.85rem', color: '#087F45', minWidth: 14, textAlign: 'center' }}>
+                          {qty}
+                        </span>
+                        <button
+                          onClick={() => addToCart(item, 1)}
+                          style={{
+                            background: 'none',
+                            border: 'none',
+                            color: '#087F45',
+                            fontWeight: 900,
+                            fontSize: '1rem',
+                            cursor: 'pointer',
+                            padding: '0 4px'
+                          }}
+                        >
+                          +
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          addToCart(item, 1);
+                        }}
+                        style={{
+                          background: '#EBF7EE',
+                          border: '1.5px solid #86EFAC',
+                          color: '#087F45',
+                          borderRadius: 20,
+                          padding: '6px 18px',
+                          fontWeight: 800,
+                          fontSize: '0.85rem',
+                          cursor: 'pointer',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: 4,
+                          transition: 'all 0.2s'
+                        }}
+                      >
+                        + Add
+                      </button>
+                    )}
                   </div>
                 </div>
               </div>
@@ -404,6 +428,4 @@ const CustomerMenu = () => {
       />
     </div>
   );
-};
-
-export default CustomerMenu;
+}

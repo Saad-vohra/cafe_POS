@@ -18,6 +18,7 @@ const rewardMilestoneSchema = new mongoose.Schema({
 const loyaltySettingSchema = new mongoose.Schema({
   restaurantId: { type: mongoose.Schema.Types.ObjectId, ref: 'Restaurant', index: true },
   stampsPerCard: { type: Number, default: 8, min: 2, max: 24 },
+  minSpendForStamp: { type: Number, default: 200, min: 0 },
   milestones: [rewardMilestoneSchema]
 }, { timestamps: true });
 
@@ -28,6 +29,7 @@ loyaltySettingSchema.statics.getOrCreateDefault = async function(restaurantId) {
     settings = new this({
       restaurantId: restaurantId || null,
       stampsPerCard: 8,
+      minSpendForStamp: 200,
       milestones: [
         {
           milestoneId: 'milestone_coffee_4',
