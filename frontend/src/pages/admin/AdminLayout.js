@@ -11,6 +11,7 @@ import Staff from './Staff';
 import Takeaway from './Takeaway';
 
 import StaffScanQR from './StaffScanQR';
+import Customers from './Customers';
 
 export default function AdminLayout() {
   return (
@@ -24,6 +25,7 @@ export default function AdminLayout() {
           <Route path="menu" element={<Menu />} />
           <Route path="orders" element={<Orders />} />
           <Route path="billing" element={<Billing />} />
+          <Route path="customers" element={<Customers />} />
           <Route path="reports" element={<Reports />} />
           <Route path="staff" element={<Staff />} />
           <Route path="scan-qr" element={<StaffScanQR />} />

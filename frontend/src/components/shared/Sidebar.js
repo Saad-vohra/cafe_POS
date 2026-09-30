@@ -30,9 +30,10 @@ export default function Sidebar({ role }) {
     { icon: '🍽️', label: 'Menu', path: '/admin/menu' },
     { icon: '📋', label: 'Orders', path: '/admin/orders' },
     { icon: '💳', label: 'Billing', path: '/admin/billing' },
+    { icon: '👥', label: 'Customers', path: '/admin/customers' },
     { icon: '🎁', label: 'Scan Customer QR', path: '/admin/scan-qr' },
     { icon: '📈', label: 'Reports', path: '/admin/reports' },
-    { icon: '👥', label: 'Staff', path: '/admin/staff' },
+    { icon: '🧑‍💼', label: 'Staff', path: '/admin/staff' },
   ];
 
   const waiterLinks = [

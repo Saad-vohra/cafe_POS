@@ -171,80 +171,131 @@ router.post('/', optionalAuth, async (req, res) => {
     const now = new Date();
     // Mark all initial items as freshly added in batch 1
     const items = (req.body.items || []).map(item => ({
-      ...item,
+      menuItemId: item.menuItemId || item.menu || item._id,
+      name: item.name,
+      price: item.price,
+      quantity: item.quantity,
+      notes: item.notes || '',
       served: false,
       addedAt: now,
       servedAt: null,
-      batchNumber: 1          // first order = batch 1
+      batchNumber: 1
     }));
+
+    // Ensure restaurantId is always present
+    let restaurantId = req.restaurantId;
+    if (!restaurantId) {
+      const defaultRest = await require('../models/Restaurant').findOne({ active: true });
+      if (defaultRest) restaurantId = defaultRest._id;
+    }
 
     const isTakeaway = req.body.orderType === 'takeaway';
     let tableId = req.body.tableId;
+    const tableNum = req.body.tableNumber ? parseInt(req.body.tableNumber, 10) : undefined;
 
-    // If customer ordered via Table QR and tableNumber is given without tableId
-    if (!isTakeaway && !tableId && req.body.tableNumber) {
-      const table = await Table.findOne({
-        tableNumber: parseInt(req.body.tableNumber, 10),
-        restaurantId: req.restaurantId
+    // If dine-in order and tableNumber is given, ensure table exists and get tableId
+    if (!isTakeaway && tableNum) {
+      let table = await Table.findOne({
+        tableNumber: tableNum,
+        ...(restaurantId ? { restaurantId } : {})
       });
+
+      if (!table && restaurantId) {
+        // Auto-create table so it can be occupied and tracked
+        table = await Table.create({
+          tableNumber: tableNum,
+          restaurantId,
+          status: 'occupied',
+          customerCount: req.body.customerCount || 1
+        });
+      }
       if (table) tableId = table._id;
     }
 
+    // Resolve customer from database if customerId or phone is provided
+    let customerDoc = null;
+    const rawCustomerId = req.body.customerId;
+    if (rawCustomerId) {
+      const isObjectId = require('mongoose').Types.ObjectId.isValid(rawCustomerId);
+      customerDoc = await Customer.findOne(
+        isObjectId
+          ? { $or: [{ _id: rawCustomerId }, { customerId: rawCustomerId }] }
+          : { customerId: rawCustomerId }
+      );
+    } else if (req.body.customerPhone) {
+      customerDoc = await Customer.findOne({ phone: req.body.customerPhone.trim() });
+    }
+
+    const customerName = req.body.customerName || customerDoc?.name || (isTakeaway ? 'Takeaway Customer' : `Table ${tableNum || 5} Customer`);
+    const customerPhone = req.body.customerPhone || customerDoc?.phone || '';
+
     const orderData = {
-      ...req.body,
+      restaurantId,
       orderType: isTakeaway ? 'takeaway' : 'dine_in',
-      customerName: req.body.customerName || (isTakeaway ? 'Parcel Customer' : 'Table Customer'),
-      customerPhone: req.body.customerPhone || '',
-      customerId: req.body.customerId || undefined,
+      customerName,
+      customerPhone,
+      customerId: customerDoc ? customerDoc._id : undefined,
+      customerCode: customerDoc ? customerDoc.customerId : (typeof rawCustomerId === 'string' ? rawCustomerId : ''),
       takeawayToken: req.body.takeawayToken || '',
       items,
       tableId: isTakeaway ? undefined : tableId,
-      tableNumber: isTakeaway ? undefined : (req.body.tableNumber ? parseInt(req.body.tableNumber, 10) : undefined),
-      restaurantId: req.restaurantId,
+      tableNumber: isTakeaway ? undefined : tableNum,
       waiterId: req.user?._id || undefined,
-      waiterName: req.user?.name || (req.body.customerName ? `Self (${req.body.customerName})` : 'QR Table Order'),
-      batchCount: 1           // track total batches so far
+      waiterName: req.user?.name || `Self QR (${customerName})`,
+      status: req.body.status && req.body.status !== 'placed' ? req.body.status : 'pending',
+      customerCount: req.body.customerCount || 1,
+      notes: req.body.notes || '',
+      batchCount: 1
     };
-
-    if (isTakeaway) {
-      delete orderData.tableId;
-      delete orderData.tableNumber;
-    }
 
     const order = new Order(orderData);
     await order.save();
 
-    // If customer ID provided, attach to customer's active orders
-    if (req.body.customerId) {
-      await Customer.findByIdAndUpdate(req.body.customerId, {
-        $addToSet: { orders: order._id },
-        activeTable: req.body.tableNumber ? parseInt(req.body.tableNumber, 10) : null
-      });
+    // Link order to customer document and update stats
+    if (customerDoc) {
+      customerDoc.orders.push(order._id);
+      if (tableNum) customerDoc.activeTable = tableNum;
+      customerDoc.lastVisit = now;
+      customerDoc.totalVisits = (customerDoc.totalVisits || 0) + 1;
+      await customerDoc.save();
     }
 
     // Occupy table for dine-in orders
     if (!isTakeaway && tableId) {
-      await Table.findOneAndUpdate(
-        { _id: tableId },
-        { status: 'occupied', currentOrderId: order._id, customerCount: req.body.customerCount || 1 }
-      );
+      await Table.findByIdAndUpdate(tableId, {
+        status: 'occupied',
+        currentOrderId: order._id,
+        customerCount: req.body.customerCount || 1
+      });
     }
 
+    // Broadcast to Kitchen, Orders, Waiter, and Billing via Socket.io
     const io = req.app.get('io');
     if (io) {
-      const room = `restaurant-${req.restaurantId}`;
-      io.to(`kitchen-${req.restaurantId}`).emit('new-order', order);
+      const room = `restaurant-${restaurantId}`;
+      const kitchenRoom = `kitchen-${restaurantId}`;
+
+      // Notify Kitchen Display
+      io.to(kitchenRoom).emit('new-order', order);
+      io.emit('new-order', order); // Broadcast so any open kitchen screen picks it up immediately
+
+      // Notify Orders, Tables, and Billing screens
       if (!isTakeaway) {
         io.to(room).emit('table-updated');
+        io.emit('table-updated');
       }
       io.to(room).emit('order-created', order);
-      if (req.body.customerId) {
-        io.emit(`customer-order-created-${req.body.customerId}`, order);
+      io.emit('order-created', order);
+
+      // Customer specific channel
+      if (customerDoc) {
+        io.emit(`customer-order-created-${customerDoc._id}`, order);
       }
     }
 
     res.status(201).json(order);
   } catch (err) {
+    console.error('Order creation error:', err);
     res.status(400).json({ message: err.message });
   }
 });

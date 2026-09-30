@@ -7,6 +7,52 @@ const Table = require('../models/Table');
 const Restaurant = require('../models/Restaurant');
 const { auth } = require('../middleware/auth');
 
+// 0. Admin: Get all customers with search, filter, and aggregate statistics
+router.get('/', async (req, res) => {
+  try {
+    const { search, filter } = req.query;
+    let query = {};
+
+    if (search && search.trim()) {
+      const q = search.trim();
+      query.$or = [
+        { name: { $regex: q, $options: 'i' } },
+        { phone: { $regex: q, $options: 'i' } },
+        { customerId: { $regex: q, $options: 'i' } }
+      ];
+    }
+
+    if (filter === 'active') {
+      query.activeTable = { $ne: null };
+    } else if (filter === 'rewards') {
+      query['rewards.status'] = 'available';
+    }
+
+    const customers = await Customer.find(query).sort({ lastVisit: -1, createdAt: -1 });
+
+    // Aggregate statistics for admin dashboard
+    const allCustomers = await Customer.find({});
+    const totalCustomers = allCustomers.length;
+    const totalStampsAwarded = allCustomers.reduce((sum, c) => sum + (c.totalStamps || 0), 0);
+    const activeDineInCustomers = allCustomers.filter(c => c.activeTable).length;
+    const customersWithAvailableRewards = allCustomers.filter(c =>
+      c.rewards && c.rewards.some(r => r.status === 'available')
+    ).length;
+
+    res.json({
+      customers,
+      stats: {
+        totalCustomers,
+        totalStampsAwarded,
+        activeDineInCustomers,
+        customersWithAvailableRewards
+      }
+    });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
 // 1. Customer Login / Identification via Table QR Code
 // Automatically identifies or creates profile without blocking returning customers
 // Generates/refreshes unique reward token every visit

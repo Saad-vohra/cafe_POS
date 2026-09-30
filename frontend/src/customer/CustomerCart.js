@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useCustomer } from './CustomerContext';
 import { getFoodImage } from './foodImages';
 import axios from 'axios';
+import toast from 'react-hot-toast';
 
 const CustomerCart = () => {
   const navigate = useNavigate();
@@ -42,11 +43,14 @@ const CustomerCart = () => {
 
     try {
       const orderPayload = {
-        tableNumber: tableNumber ? parseInt(tableNumber) : 5,
-        orderType: 'dine-in',
-        customerId: customer?.customerId || '',
+        tableNumber: tableNumber ? parseInt(tableNumber, 10) : 5,
+        orderType: 'dine_in',
+        status: 'pending',
+        customerId: customer?._id || customer?.customerId || '',
+        customerName: customer?.name || 'Customer',
+        customerPhone: customer?.phone || '',
         items: cart.map(item => ({
-          menu: item._id && !item._id.startsWith('def_') ? item._id : undefined,
+          menuItemId: item._id && !item._id.startsWith('def_') && !item._id.startsWith('item_') ? item._id : undefined,
           name: item.name,
           quantity: item.quantity,
           price: item.price,
@@ -59,7 +63,9 @@ const CustomerCart = () => {
 
       // Update active orders in context
       if (newOrder) {
-        setActiveOrders(prev => [newOrder, ...prev]);
+        if (typeof setActiveOrders === 'function') {
+          setActiveOrders(prev => [newOrder, ...(Array.isArray(prev) ? prev : [])]);
+        }
       }
 
       // Clear the current cart
@@ -74,31 +80,9 @@ const CustomerCart = () => {
       });
     } catch (err) {
       console.error('Failed to send order to kitchen:', err);
-      // Fallback mock order if backend fails
-      const mockOrder = {
-        _id: 'ord_' + Math.random().toString(36).substr(2, 9),
-        orderNumber: 'TJ' + Math.floor(1000 + Math.random() * 9000),
-        tableNumber: tableNumber || 5,
-        status: 'placed',
-        items: cart.map(item => ({
-          name: item.name,
-          quantity: item.quantity,
-          price: item.price,
-          notes: item.notes || ''
-        })),
-        totalAmount: cartTotal,
-        createdAt: new Date().toISOString()
-      };
-
-      setActiveOrders(prev => [mockOrder, ...prev]);
-      clearCart();
-
-      navigate('/customer/order-status', {
-        state: {
-          justPlaced: true,
-          order: mockOrder
-        }
-      });
+      const msg = err.response?.data?.message || 'Failed to place order. Please check network and try again.';
+      setErrorMsg(msg);
+      toast.error(msg);
     } finally {
       setIsSubmitting(false);
     }

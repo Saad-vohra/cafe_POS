@@ -68,12 +68,13 @@ const orderItemSchema = new mongoose.Schema({
 const orderSchema = new mongoose.Schema({
   restaurantId: { type: mongoose.Schema.Types.ObjectId, ref: 'Restaurant', required: true, index: true },
   orderNumber: { type: Number },
-  orderType: { type: String, enum: ['dine_in', 'takeaway'], default: 'dine_in' },
+  orderType: { type: String, enum: ['dine_in', 'dine-in', 'takeaway'], default: 'dine_in' },
   tableId: { type: mongoose.Schema.Types.ObjectId, ref: 'Table', required: false },
   tableNumber: { type: Number, required: false },
   customerName: { type: String, default: '' },
   customerPhone: { type: String, default: '' },
   customerId: { type: mongoose.Schema.Types.ObjectId, ref: 'Customer' },
+  customerCode: { type: String, default: '' },
   appliedReward: {
     rewardId: { type: String },
     title: { type: String },
@@ -83,7 +84,7 @@ const orderSchema = new mongoose.Schema({
   waiterId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
   waiterName: { type: String },
   items: [orderItemSchema],
-  status: { type: String, enum: ['pending', 'accepted', 'preparing', 'ready', 'served', 'completed', 'cancelled'], default: 'pending' },
+  status: { type: String, enum: ['pending', 'accepted', 'preparing', 'ready', 'served', 'completed', 'cancelled', 'placed'], default: 'pending' },
   totalAmount: { type: Number, default: 0 },
   customerCount: { type: Number, default: 1 },
   notes: { type: String, default: '' },
