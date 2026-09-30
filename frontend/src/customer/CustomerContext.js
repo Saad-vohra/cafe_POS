@@ -362,25 +362,34 @@ export function CustomerProvider({ children }) {
     return res.data;
   };
 
-  // Next reward milestone helper
+  // Next reward milestone helper with repeatable card cycles
   const getNextReward = () => {
     const totalStamps = customer?.totalStamps || 0;
-    const currentInCycle = totalStamps % 8;
+    const cardCycle = Math.floor(Math.max(0, totalStamps - 1) / 8) + 1;
+    const currentInCycle = totalStamps === 0 ? 0 : ((totalStamps - 1) % 8) + 1;
 
     if (currentInCycle < 4) {
       return {
-        rewardName: 'Free Artisan Coffee',
+        cardCycle,
+        rewardName: 'Free Coffee',
         targetStamps: 4,
         stampsNeeded: 4 - currentInCycle
       };
     } else if (currentInCycle < 8) {
       return {
+        cardCycle,
         rewardName: '20% OFF Entire Bill',
         targetStamps: 8,
         stampsNeeded: 8 - currentInCycle
       };
+    } else {
+      return {
+        cardCycle,
+        rewardName: '20% OFF Entire Bill',
+        targetStamps: 8,
+        stampsNeeded: 0
+      };
     }
-    return null;
   };
 
   const cartCount = cart.reduce((sum, item) => sum + item.quantity, 0);

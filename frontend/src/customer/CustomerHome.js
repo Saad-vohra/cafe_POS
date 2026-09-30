@@ -14,27 +14,35 @@ export default function CustomerHome() {
 
   const totalStamps = customer?.totalStamps || 0;
 
-  // Calculate next reward milestone
-  // Target 1: 4 stamps = Free Coffee
-  // Target 2: 8 stamps = 20% OFF
-  let nextRewardTitle = 'Free Coffee';
+  // Repeatable 8-stamp card cycle:
+  // Card #1 = stamps 1..8
+  // Card #2 = stamps 9..16
+  // Card #3 = stamps 17..24
+  const cardCycle = Math.floor(Math.max(0, totalStamps - 1) / 8) + 1;
+  const currentCardStamps = totalStamps === 0 ? 0 : ((totalStamps - 1) % 8) + 1;
+
+  // Target 1: 4 stamps on current card = Free Coffee
+  // Target 2: 8 stamps on current card = 20% OFF
+  let nextRewardTitle = 'FREE Coffee';
   let targetStamps = 4;
-  let remainingStamps = Math.max(0, 4 - totalStamps);
+  let remainingStamps = 4;
   let milestoneUnlocked = false;
 
-  if (totalStamps < 4) {
+  if (currentCardStamps < 4) {
     nextRewardTitle = 'FREE Coffee';
     targetStamps = 4;
-    remainingStamps = 4 - totalStamps;
-  } else if (totalStamps === 4) {
+    remainingStamps = 4 - currentCardStamps;
+    milestoneUnlocked = false;
+  } else if (currentCardStamps === 4) {
     nextRewardTitle = 'FREE Coffee';
     targetStamps = 4;
     remainingStamps = 0;
     milestoneUnlocked = true;
-  } else if (totalStamps < 8) {
+  } else if (currentCardStamps < 8) {
     nextRewardTitle = '20% OFF';
     targetStamps = 8;
-    remainingStamps = 8 - totalStamps;
+    remainingStamps = 8 - currentCardStamps;
+    milestoneUnlocked = false;
   } else {
     nextRewardTitle = '20% OFF';
     targetStamps = 8;
@@ -42,8 +50,8 @@ export default function CustomerHome() {
     milestoneUnlocked = true;
   }
 
-  // Stamp indicators for the active milestone
-  const stampSlots = Array.from({ length: targetStamps }, (_, i) => i + 1);
+  // Active card always shows all 8 visual stamp bubbles
+  const stampSlots = [1, 2, 3, 4, 5, 6, 7, 8];
 
   return (
     <div>
@@ -70,10 +78,12 @@ export default function CustomerHome() {
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontWeight: 800, fontSize: 14, color: '#087F45' }}>
               <span>🎁</span>
-              <span>{milestoneUnlocked ? 'Reward Unlocked!' : 'Next Reward Progress'}</span>
+              <span>{milestoneUnlocked ? 'Reward Unlocked!' : `Card #${cardCycle} Progress`}</span>
             </div>
             <div style={{ fontWeight: 800, fontSize: '1.15rem', color: '#1A2E22', marginTop: 2 }}>
-              {milestoneUnlocked ? `🎉 ${nextRewardTitle} Unlocked!` : `Collect ${targetStamps} Stamps → Get a ${nextRewardTitle}`}
+              {milestoneUnlocked
+                ? `🎉 ${nextRewardTitle} Unlocked!`
+                : `Collect ${targetStamps} Stamps → Get ${nextRewardTitle}`}
             </div>
           </div>
           <span style={{
@@ -84,21 +94,24 @@ export default function CustomerHome() {
             padding: '4px 10px',
             borderRadius: 20
           }}>
-            {totalStamps} / {targetStamps} Stamps
+            {currentCardStamps} / 8 Stamps {cardCycle > 1 ? `(Card #${cardCycle})` : ''}
           </span>
         </div>
 
         {/* Visual Stamp Bubbles */}
         <div className="stamp-progress-row">
           {stampSlots.map(num => {
-            const isStamped = num <= totalStamps;
-            const isMilestone = num === targetStamps;
+            const isStamped = num <= currentCardStamps;
+            const isCoffeeSlot = num === 4;
+            const isDiscountSlot = num === 8;
             return (
               <div
                 key={num}
-                className={`stamp-bubble ${isStamped ? 'filled' : ''} ${isMilestone ? 'milestone' : ''}`}
+                className={`stamp-bubble ${isStamped ? 'filled' : ''} ${isCoffeeSlot || isDiscountSlot ? 'milestone' : ''}`}
               >
-                {isStamped ? (isMilestone ? '🎁' : '✓') : (isMilestone ? '🎁' : num)}
+                {isStamped
+                  ? (isDiscountSlot ? '🎁' : isCoffeeSlot ? '☕' : '✓')
+                  : (isCoffeeSlot ? '☕' : isDiscountSlot ? '🎁' : num)}
               </div>
             );
           })}
@@ -108,9 +121,9 @@ export default function CustomerHome() {
           <span style={{ fontSize: 12, color: '#5A6E62', fontWeight: 600 }}>
             {remainingStamps > 0
               ? `🔥 ${remainingStamps} more stamp${remainingStamps > 1 ? 's' : ''} to unlock your ${nextRewardTitle}!`
-              : totalStamps === 4
+              : currentCardStamps === 4
                 ? 'Next: Collect 8 stamps → Get 20% OFF'
-                : 'All milestone rewards ready to redeem!'}
+                : `🎉 Card #${cardCycle} Complete! Next stamp starts Card #${cardCycle + 1}`}
           </span>
           <span style={{ fontSize: 12, color: '#087F45', fontWeight: 700 }}>
             View Stamps →

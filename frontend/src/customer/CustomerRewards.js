@@ -12,8 +12,9 @@ const CustomerRewards = () => {
     }
   }, []);
 
-  const totalStamps = customer?.totalStamps || 3;
-  const currentStampsInCycle = totalStamps % 8; // 8-stamp card
+  const totalStamps = customer?.totalStamps || 0;
+  const cardCycle = Math.floor(Math.max(0, totalStamps - 1) / 8) + 1;
+  const currentStampsInCycle = totalStamps === 0 ? 0 : ((totalStamps - 1) % 8) + 1;
   const nextReward = getNextReward();
 
   // All 8 card slots
@@ -129,7 +130,7 @@ const CustomerRewards = () => {
               Loyalty Pass
             </div>
             <h3 style={{ fontSize: '1.25rem', fontWeight: 800, color: '#1e293b' }}>
-              Your Stamp Card
+              Your Stamp Card {cardCycle > 1 ? `(Card #${cardCycle})` : ''}
             </h3>
           </div>
 

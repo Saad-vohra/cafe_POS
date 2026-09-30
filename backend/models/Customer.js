@@ -28,36 +28,46 @@ const customerSchema = new mongoose.Schema({
   orders: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Order' }]
 }, { timestamps: true });
 
-// Function to generate standard default rewards tier
+// Function to generate standard default rewards tiers across repeatable card cycles
 customerSchema.methods.initDefaultRewards = function() {
-  const defaultTiers = [
-    {
-      rewardId: 'rew_coffee_4',
-      title: 'Free Coffee',
-      description: 'Get a complimentary freshly brewed espresso or cappuccino',
-      requiredStamps: 4,
-      rewardType: 'free_item',
-      rewardValue: 0,
-      status: this.totalStamps >= 4 ? 'available' : 'locked'
-    },
-    {
-      rewardId: 'rew_discount_8',
-      title: '20% OFF',
-      description: 'Enjoy 20% off your entire dining bill',
-      requiredStamps: 8,
-      rewardType: 'discount_percent',
-      rewardValue: 20,
-      status: this.totalStamps >= 8 ? 'available' : 'locked'
-    }
-  ];
+  const totalStamps = this.totalStamps || 0;
+  // Determine how many 8-stamp cycles to prepare rewards for (at least 1, plus active cycle)
+  const maxCycles = Math.max(1, Math.floor(Math.max(0, totalStamps - 1) / 8) + 1);
 
-  // If customer doesn't have these rewards yet, attach them
-  defaultTiers.forEach(tier => {
-    const exists = this.rewards.some(r => r.rewardId === tier.rewardId);
-    if (!exists) {
-      this.rewards.push(tier);
+  for (let c = 1; c <= maxCycles; c++) {
+    const coffeeReq = 4 + (c - 1) * 8;
+    const discountReq = 8 * c;
+
+    const coffeeId = c === 1 ? 'rew_coffee_4' : `rew_coffee_${coffeeReq}`;
+    const discountId = c === 1 ? 'rew_discount_8' : `rew_discount_${discountReq}`;
+
+    const coffeeTitle = c === 1 ? 'Free Coffee' : `Free Coffee (Card #${c})`;
+    const discountTitle = c === 1 ? '20% OFF' : `20% OFF (Card #${c})`;
+
+    if (!this.rewards.some(r => r.rewardId === coffeeId)) {
+      this.rewards.push({
+        rewardId: coffeeId,
+        title: coffeeTitle,
+        description: 'Get a complimentary freshly brewed espresso or cappuccino',
+        requiredStamps: coffeeReq,
+        rewardType: 'free_item',
+        rewardValue: 0,
+        status: totalStamps >= coffeeReq ? 'available' : 'locked'
+      });
     }
-  });
+
+    if (!this.rewards.some(r => r.rewardId === discountId)) {
+      this.rewards.push({
+        rewardId: discountId,
+        title: discountTitle,
+        description: 'Enjoy 20% off your entire dining bill',
+        requiredStamps: discountReq,
+        rewardType: 'discount_percent',
+        rewardValue: 20,
+        status: totalStamps >= discountReq ? 'available' : 'locked'
+      });
+    }
+  }
 };
 
 // Auto-check and update reward statuses whenever stamps change

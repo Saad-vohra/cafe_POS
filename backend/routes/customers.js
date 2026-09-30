@@ -133,6 +133,89 @@ router.get('/:id', async (req, res) => {
   }
 });
 
+// 2b. Get customer's real dining orders history
+router.get('/:id/orders', async (req, res) => {
+  try {
+    const isObjectId = require('mongoose').Types.ObjectId.isValid(req.params.id);
+    const query = isObjectId
+      ? { $or: [{ _id: req.params.id }, { customerId: req.params.id }] }
+      : { customerId: req.params.id };
+
+    const customer = await Customer.findOne(query);
+    if (!customer) {
+      return res.status(404).json({ message: 'Customer not found' });
+    }
+
+    // Find all real orders associated with this customer
+    const orderFilter = {
+      $or: [
+        { customerId: customer._id },
+        { customerPhone: customer.phone },
+        { customerCode: customer.customerId },
+        { _id: { $in: customer.orders || [] } }
+      ]
+    };
+
+    const orders = await Order.find(orderFilter)
+      .sort({ createdAt: -1 })
+      .limit(30);
+
+    // Also look up matching bills for paid details
+    const orderIds = orders.map(o => o._id);
+    const billFilter = {
+      $or: [
+        { customerId: customer._id },
+        { customerPhone: customer.phone },
+        { orderId: { $in: orderIds } }
+      ]
+    };
+    const bills = await Bill.find(billFilter).sort({ createdAt: -1 });
+
+    const orderHistory = orders.map(order => {
+      const matchingBill = bills.find(b => b.orderId && b.orderId.toString() === order._id.toString());
+      const subtotal = matchingBill ? matchingBill.subtotal : order.totalAmount;
+      const discount = matchingBill ? (matchingBill.discountAmount || 0) : (order.appliedReward?.discountAmount || 0);
+      const tax = matchingBill ? (matchingBill.gstAmount || 0) : Math.round(subtotal * 0.05);
+      const amount = matchingBill ? matchingBill.totalAmount : Math.max(0, subtotal + tax - discount);
+      const paymentMethod = matchingBill ? (matchingBill.paymentMode?.toUpperCase() || 'UPI') : 'UPI';
+      const status = matchingBill ? 'Paid' : (order.status === 'completed' ? 'Paid' : order.status);
+
+      // Nicely format the date for display
+      const d = new Date(order.createdAt || Date.now());
+      const isToday = new Date().toDateString() === d.toDateString();
+      const timeStr = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      const dateStr = isToday ? `Today, ${timeStr}` : `${d.toLocaleDateString([], { day: '2-digit', month: 'short', year: 'numeric' })}, ${timeStr}`;
+
+      return {
+        id: `TJ${order.orderNumber || 1000}`,
+        orderNumber: order.orderNumber,
+        date: dateStr,
+        rawDate: order.createdAt,
+        table: order.tableNumber || 5,
+        amount,
+        subtotal,
+        tax,
+        discount,
+        paymentMethod,
+        status: status === 'placed' ? 'Placed' : status === 'ready' ? 'Ready' : status === 'preparing' ? 'Preparing' : 'Paid',
+        items: (order.items || []).map(i => ({
+          name: i.name,
+          qty: i.quantity || 1,
+          price: i.price,
+          notes: i.notes || ''
+        }))
+      };
+    });
+
+    res.json({
+      success: true,
+      orders: orderHistory
+    });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
 // 3. Staff Scan: Lookup customer by secure rewardToken
 router.get('/token/:token', async (req, res) => {
   try {

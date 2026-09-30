@@ -1,64 +1,42 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import axios from 'axios';
 import { useCustomer } from './CustomerContext';
 
 const CustomerProfile = () => {
   const navigate = useNavigate();
   const { customer, tableNumber, logoutCustomer } = useCustomer();
   const [selectedPastOrder, setSelectedPastOrder] = useState(null);
+  const [orderHistory, setOrderHistory] = useState([]);
+  const [loadingOrders, setLoadingOrders] = useState(true);
 
-  const totalStamps = customer?.totalStamps || 3;
-  const currentStampsInCycle = totalStamps % 8;
+  const totalStamps = customer?.totalStamps || 0;
+  const cardCycle = Math.floor(Math.max(0, totalStamps - 1) / 8) + 1;
+  const currentStampsInCycle = totalStamps === 0 ? 0 : ((totalStamps - 1) % 8) + 1;
 
-  // Past orders sample history
-  const orderHistory = [
-    {
-      id: 'TJ1258',
-      date: 'Today, 12:45 PM',
-      table: tableNumber || 5,
-      amount: 532,
-      subtotal: 507,
-      tax: 25,
-      discount: 0,
-      paymentMethod: 'UPI',
-      status: 'Paid',
-      items: [
-        { name: 'Margherita Pizza', qty: 1, price: 249, notes: 'Crispy thin crust' },
-        { name: 'Coca Cola', qty: 1, price: 79, notes: 'With ice' },
-        { name: 'Veg Burger', qty: 1, price: 179, notes: 'No mayo' }
-      ]
-    },
-    {
-      id: 'TJ1204',
-      date: '15 Sep 2026',
-      table: 3,
-      amount: 780,
-      subtotal: 742,
-      tax: 38,
-      discount: 0,
-      paymentMethod: 'Card',
-      status: 'Paid',
-      items: [
-        { name: 'Pasta Alfredo', qty: 2, price: 229 },
-        { name: 'Fresh Mint Mojito', qty: 2, price: 149 }
-      ]
-    },
-    {
-      id: 'TJ1150',
-      date: '02 Sep 2026',
-      table: 5,
-      amount: 418,
-      subtotal: 398,
-      tax: 20,
-      discount: 0,
-      paymentMethod: 'UPI',
-      status: 'Paid',
-      items: [
-        { name: 'Farmhouse Supreme Pizza', qty: 1, price: 329 },
-        { name: 'Cold Coffee with Ice Cream', qty: 1, price: 169 }
-      ]
-    }
-  ];
+  // Fetch real dining orders for this customer from database
+  useEffect(() => {
+    const fetchOrders = async () => {
+      const custId = customer?._id || customer?.customerId;
+      if (!custId) {
+        setLoadingOrders(false);
+        return;
+      }
+      try {
+        setLoadingOrders(true);
+        const res = await axios.get(`/api/customers/${custId}/orders`);
+        if (res.data?.orders) {
+          setOrderHistory(res.data.orders);
+        }
+      } catch (err) {
+        console.warn('Error fetching customer orders:', err.message);
+      } finally {
+        setLoadingOrders(false);
+      }
+    };
+
+    fetchOrders();
+  }, [customer?._id, customer?.customerId]);
 
   return (
     <div className="customer-page-content">
@@ -132,7 +110,7 @@ const CustomerProfile = () => {
             fontWeight: 800,
             color: 'var(--primary-green)'
           }}>
-            {currentStampsInCycle} / 8 Stamps
+            {currentStampsInCycle} / 8 Stamps {cardCycle > 1 ? `(Card #${cardCycle})` : ''}
           </span>
         </div>
 
@@ -208,53 +186,92 @@ const CustomerProfile = () => {
           Previous Dining Orders
         </h4>
 
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-          {orderHistory.map((order) => (
-            <div
-              key={order.id}
-              onClick={() => setSelectedPastOrder(order)}
+        {loadingOrders ? (
+          <div style={{ textAlign: 'center', padding: '24px 16px', color: '#64748b', fontSize: '0.85rem' }}>
+            Loading your dining orders...
+          </div>
+        ) : orderHistory.length === 0 ? (
+          <div style={{
+            textAlign: 'center',
+            padding: '28px 16px',
+            background: '#f8fafc',
+            borderRadius: 14,
+            border: '1px dashed #cbd5e1'
+          }}>
+            <div style={{ fontSize: 32, marginBottom: 8 }}>🍽️</div>
+            <div style={{ fontWeight: 700, color: '#1e293b', fontSize: '0.92rem', marginBottom: 4 }}>
+              No Dining Orders Yet
+            </div>
+            <div style={{ fontSize: '0.78rem', color: '#64748b', marginBottom: 14 }}>
+              Your order history will appear here once you place and enjoy your meals.
+            </div>
+            <button
+              onClick={() => navigate('/customer/menu')}
               style={{
-                border: '1px solid #e2e8f0',
-                borderRadius: 14,
-                padding: '14px',
-                cursor: 'pointer',
-                transition: 'all 0.2s',
-                background: '#fafafa'
+                background: 'var(--primary-green)',
+                color: '#ffffff',
+                border: 'none',
+                padding: '8px 18px',
+                borderRadius: 10,
+                fontWeight: 700,
+                fontSize: '0.8rem',
+                cursor: 'pointer'
               }}
             >
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 6 }}>
-                <div>
-                  <div style={{ fontWeight: 800, color: '#1e293b', fontSize: '0.95rem' }}>
-                    Order #{order.id}
+              Browse Menu & Order
+            </button>
+          </div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            {orderHistory.map((order) => (
+              <div
+                key={order.id}
+                onClick={() => setSelectedPastOrder(order)}
+                style={{
+                  border: '1px solid #e2e8f0',
+                  borderRadius: 14,
+                  padding: '14px',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s',
+                  background: '#fafafa'
+                }}
+              >
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 6 }}>
+                  <div>
+                    <div style={{ fontWeight: 800, color: '#1e293b', fontSize: '0.95rem' }}>
+                      Order #{order.id}
+                    </div>
+                    <div style={{ fontSize: '0.78rem', color: '#64748b' }}>
+                      {order.date} • Table {order.table}
+                    </div>
                   </div>
-                  <div style={{ fontSize: '0.78rem', color: '#64748b' }}>
-                    {order.date} • Table {order.table}
+
+                  <div style={{ textAlign: 'right' }}>
+                    <div style={{ fontWeight: 800, color: 'var(--primary-green)', fontSize: '0.95rem' }}>
+                      ₹{order.amount}
+                    </div>
+                    <span style={{
+                      fontSize: '0.7rem',
+                      fontWeight: 700,
+                      color: order.status === 'Paid' ? '#059669' : '#0284c7',
+                      background: order.status === 'Paid' ? '#d1fae5' : '#e0f2fe',
+                      padding: '2px 8px',
+                      borderRadius: 10
+                    }}>
+                      {order.status}
+                    </span>
                   </div>
                 </div>
 
-                <div style={{ textAlign: 'right' }}>
-                  <div style={{ fontWeight: 800, color: 'var(--primary-green)', fontSize: '0.95rem' }}>
-                    ₹{order.amount}
-                  </div>
-                  <span style={{
-                    fontSize: '0.7rem',
-                    fontWeight: 700,
-                    color: '#059669',
-                    background: '#d1fae5',
-                    padding: '2px 8px',
-                    borderRadius: 10
-                  }}>
-                    {order.status}
-                  </span>
+                <div style={{ fontSize: '0.78rem', color: '#64748b', marginTop: 4 }}>
+                  {order.items && order.items.length > 0
+                    ? order.items.map(it => `${it.name} (×${it.qty})`).join(', ')
+                    : 'Order details placed'}
                 </div>
               </div>
-
-              <div style={{ fontSize: '0.78rem', color: '#64748b', marginTop: 4 }}>
-                {order.items.map(it => `${it.name} (×${it.qty})`).join(', ')}
-              </div>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Switch Profile / Logout */}
