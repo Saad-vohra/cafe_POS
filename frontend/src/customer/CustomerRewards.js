@@ -1,10 +1,16 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useCustomer } from './CustomerContext';
 
 const CustomerRewards = () => {
   const navigate = useNavigate();
-  const { customer, getNextReward } = useCustomer();
+  const { customer, getNextReward, refreshCustomer } = useCustomer();
+
+  useEffect(() => {
+    if (typeof refreshCustomer === 'function') {
+      refreshCustomer();
+    }
+  }, []);
 
   const totalStamps = customer?.totalStamps || 3;
   const currentStampsInCycle = totalStamps % 8; // 8-stamp card

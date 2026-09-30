@@ -1,10 +1,16 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useCustomer } from './CustomerContext';
 
 export default function CustomerHome() {
-  const { customer, tableNumber, activeOrder } = useCustomer();
+  const { customer, tableNumber, activeOrder, refreshCustomer } = useCustomer();
   const navigate = useNavigate();
+
+  useEffect(() => {
+    if (typeof refreshCustomer === 'function') {
+      refreshCustomer();
+    }
+  }, []);
 
   const totalStamps = customer?.totalStamps || 0;
 

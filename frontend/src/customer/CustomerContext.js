@@ -56,7 +56,11 @@ export function CustomerProvider({ children }) {
 
   // Socket connection for live updates
   useEffect(() => {
-    const s = io(process.env.REACT_APP_API_URL || 'http://localhost:5000');
+    const s = io(process.env.REACT_APP_API_URL || 'http://localhost:5000', {
+      transports: ['websocket', 'polling'],
+      reconnectionAttempts: 10,
+      reconnectionDelay: 1000
+    });
     setSocket(s);
 
     return () => {
@@ -64,13 +68,69 @@ export function CustomerProvider({ children }) {
     };
   }, []);
 
+  const refreshCustomer = async () => {
+    const custId = customer?._id || customer?.customerId;
+    if (!custId) return;
+    try {
+      const res = await axios.get(`/api/customers/${custId}`);
+      if (res.data) {
+        setCustomer(prev => {
+          if (prev && res.data.totalStamps !== prev.totalStamps) {
+            toast.success(`🎉 Stamp Card Updated! Total: ${res.data.totalStamps} Stamps`, {
+              icon: '🎁',
+              id: 'stamp-toast'
+            });
+          }
+          return res.data;
+        });
+      }
+    } catch (err) {
+      // Quietly ignore network blip
+    }
+  };
+
   // Listen to customer profile updates & order status
   useEffect(() => {
-    if (!socket || !customer?._id) return;
+    if (!socket || !customer) return;
 
-    socket.on(`customer-update-${customer._id}`, (updated) => {
-      setCustomer(updated);
-      toast.success('🎉 Your loyalty stamps have been updated!', { icon: '🎁' });
+    const handleCustomerUpdate = (updated) => {
+      if (!updated) return;
+      const isMatch =
+        (customer._id && updated._id === customer._id) ||
+        (customer.customerId && updated.customerId === customer.customerId) ||
+        (customer.phone && updated.phone === customer.phone);
+
+      if (isMatch) {
+        setCustomer(updated);
+        toast.success(`🎉 Loyalty Stamps Updated! Total: ${updated.totalStamps}`, {
+          icon: '🎁',
+          id: 'stamp-toast'
+        });
+      }
+    };
+
+    if (customer._id) {
+      socket.on(`customer-update-${customer._id}`, handleCustomerUpdate);
+    }
+    if (customer.customerId) {
+      socket.on(`customer-update-${customer.customerId}`, handleCustomerUpdate);
+    }
+    if (customer.phone) {
+      socket.on(`customer-update-${customer.phone}`, handleCustomerUpdate);
+    }
+
+    socket.on('customer-stamp-added', (data) => {
+      if (
+        data.customerId === customer.customerId ||
+        data.phone === customer.phone ||
+        data._id === customer._id
+      ) {
+        if (data.customer) {
+          handleCustomerUpdate(data.customer);
+        } else {
+          refreshCustomer();
+        }
+      }
     });
 
     socket.on('order-status-updated', (updatedOrder) => {
@@ -98,56 +158,40 @@ export function CustomerProvider({ children }) {
     });
 
     return () => {
-      socket.off(`customer-update-${customer._id}`);
+      if (customer._id) socket.off(`customer-update-${customer._id}`);
+      if (customer.customerId) socket.off(`customer-update-${customer.customerId}`);
+      if (customer.phone) socket.off(`customer-update-${customer.phone}`);
+      socket.off('customer-stamp-added');
       socket.off('order-status-updated');
     };
-  }, [socket, customer?._id, activeOrder, tableNumber]);
+  }, [socket, customer?._id, customer?.customerId, customer?.phone, activeOrder, tableNumber]);
 
-  // Load existing active order for current table
+  // AUTO-POLLING & VISIBILITY SYNC
+  // Keeps the stamp card ALWAYS fresh and syncs immediately when admin adds stamp
   useEffect(() => {
-    if (tableNumber) {
-      axios.get(`/api/orders?tableNumber=${tableNumber}&active=true`)
-        .then(res => {
-          if (res.data && res.data.length > 0) {
-            setActiveOrders(res.data);
-            setActiveOrder(res.data[0]);
-          } else {
-            setActiveOrders([]);
-            setActiveOrder(null);
-          }
-        })
-        .catch(() => {});
-    }
-  }, [tableNumber]);
+    if (!customer?._id && !customer?.customerId) return;
 
-  // Login / Session creation: Returning users enter name & phone without being blocked
-  const loginCustomer = async (name, phone, tbl) => {
-    try {
-      const targetTable = tbl || tableNumber || 5;
-      const res = await axios.post('/api/customers/session', {
-        name,
-        phone,
-        tableNumber: targetTable
-      });
-      setCustomer(res.data.customer);
-      setTableNumber(targetTable);
-      localStorage.setItem('srms_customer_table', targetTable.toString());
-      return res.data.customer;
-    } catch (err) {
-      toast.error(err.response?.data?.message || 'Login failed');
-      throw err;
-    }
-  };
+    // Refresh immediately upon mount
+    refreshCustomer();
 
-  const refreshCustomer = async () => {
-    if (!customer?._id) return;
-    try {
-      const res = await axios.get(`/api/customers/${customer._id}`);
-      setCustomer(res.data);
-    } catch (err) {
-      console.error(err);
-    }
-  };
+    // 1. Sync on window focus or when tab becomes visible
+    const handleSync = () => {
+      refreshCustomer();
+    };
+    window.addEventListener('focus', handleSync);
+    document.addEventListener('visibilitychange', handleSync);
+
+    // 2. Poll every 2.5 seconds to guarantee instant visual sync without logout/login
+    const interval = setInterval(() => {
+      refreshCustomer();
+    }, 2500);
+
+    return () => {
+      window.removeEventListener('focus', handleSync);
+      document.removeEventListener('visibilitychange', handleSync);
+      clearInterval(interval);
+    };
+  }, [customer?._id, customer?.customerId]);
 
   // Add item with particular dish note
   const addToCart = (item, quantity = 1, dishNote = '') => {

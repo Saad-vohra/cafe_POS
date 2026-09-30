@@ -8,25 +8,30 @@ require('dotenv').config();
 const app = express();
 const server = http.createServer(app);
 
-// Allow a comma-separated list of frontend origins (e.g. your Vercel domain + custom domains)
-const allowedOrigins = (process.env.FRONTEND_URL || '*')
-  .split(',')
-  .map(o => o.trim())
-  .filter(Boolean);
+// Allow localhost, 127.0.0.1, and any configured FRONTEND_URL
+const allowedOrigins = [
+  'http://localhost:3000',
+  'http://127.0.0.1:3000',
+  ...(process.env.FRONTEND_URL ? process.env.FRONTEND_URL.split(',').map(o => o.trim()) : [])
+].filter(Boolean);
+
+const corsOriginHandler = (origin, callback) => {
+  if (!origin) return callback(null, true);
+  if (allowedOrigins.indexOf(origin) !== -1 || allowedOrigins.includes('*')) {
+    return callback(null, true);
+  }
+  return callback(null, true); // Allow all web/mobile origins in development
+};
 
 const corsOptions = {
-  origin: allowedOrigins.includes('*') ? '*' : allowedOrigins,
+  origin: corsOriginHandler,
   methods: ['GET', 'POST', 'PUT', 'DELETE'],
   credentials: true
 };
 
 const io = new Server(server, { cors: corsOptions });
 
-//app.use(cors(corsOptions));
-app.use(cors({
- origin: process.env.FRONTEND_URL,
- credentials:true
-}));
+app.use(cors(corsOptions));
 app.use(express.json());
 
 app.set('io', io);

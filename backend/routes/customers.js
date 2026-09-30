@@ -106,10 +106,15 @@ router.post('/session', async (req, res) => {
   }
 });
 
-// 2. Get customer profile and reward progress by ID
+// 2. Get customer profile and reward progress by ID or Customer Code
 router.get('/:id', async (req, res) => {
   try {
-    const customer = await Customer.findById(req.params.id)
+    const isObjectId = require('mongoose').Types.ObjectId.isValid(req.params.id);
+    const query = isObjectId
+      ? { $or: [{ _id: req.params.id }, { customerId: req.params.id }] }
+      : { customerId: req.params.id };
+
+    const customer = await Customer.findOne(query)
       .populate({
         path: 'orders',
         options: { sort: { createdAt: -1 }, limit: 20 }
@@ -145,14 +150,21 @@ router.get('/token/:token', async (req, res) => {
   }
 });
 
-// 4. Staff adds stamp after scanning customer QR code
+// 4. Staff adds stamp after scanning customer QR code or from Admin Panel
 router.post('/add-stamp', async (req, res) => {
   try {
     const { token, customerId, stampsToAdd } = req.body;
     let query = {};
-    if (token) query.rewardToken = token;
-    else if (customerId) query.customerId = customerId;
-    else return res.status(400).json({ message: 'Reward token or Customer ID required' });
+    if (token) {
+      query.rewardToken = token;
+    } else if (customerId) {
+      const isObjectId = require('mongoose').Types.ObjectId.isValid(customerId);
+      query = isObjectId
+        ? { $or: [{ _id: customerId }, { customerId }] }
+        : { customerId };
+    } else {
+      return res.status(400).json({ message: 'Reward token or Customer ID required' });
+    }
 
     const customer = await Customer.findOne(query);
     if (!customer) {
@@ -160,17 +172,28 @@ router.post('/add-stamp', async (req, res) => {
     }
 
     const count = parseInt(stampsToAdd, 10) || 1;
-    const oldStamps = customer.totalStamps;
-    customer.totalStamps += count;
+    const oldStamps = customer.totalStamps || 0;
+    customer.totalStamps = oldStamps + count;
 
     customer.initDefaultRewards();
     customer.evaluateRewards();
     await customer.save();
 
-    // Emit live socket event so customer mobile screen updates instantly
+    // Broadcast across multiple channels to ensure instant customer update
     const io = req.app.get('io');
     if (io) {
       io.emit(`customer-update-${customer._id}`, customer);
+      io.emit(`customer-update-${customer.customerId}`, customer);
+      if (customer.phone) {
+        io.emit(`customer-update-${customer.phone}`, customer);
+      }
+      io.emit('customer-stamp-added', {
+        _id: customer._id,
+        customerId: customer.customerId,
+        phone: customer.phone,
+        totalStamps: customer.totalStamps,
+        customer
+      });
       if (customer.restaurantId) {
         io.to(`restaurant-${customer.restaurantId}`).emit('customer-stamp-added', {
           customerId: customer.customerId,
