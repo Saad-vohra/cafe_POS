@@ -239,27 +239,6 @@ const CustomerRewards = () => {
           </div>
         </div>
 
-        {/* Shortcut to Customer QR Code */}
-        <div style={{ marginTop: 14, textAlign: 'center' }}>
-          <button
-            onClick={() => navigate('/customer/reward-qr')}
-            style={{
-              background: 'none',
-              border: '1.5px solid var(--primary-green)',
-              color: 'var(--primary-green)',
-              borderRadius: 12,
-              padding: '10px 16px',
-              fontSize: '0.82rem',
-              fontWeight: 800,
-              cursor: 'pointer',
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: 8
-            }}
-          >
-            <span>📱 Show My Reward QR to Staff</span>
-          </button>
-        </div>
       </div>
 
       {/* Rewards Catalog & Status List */}

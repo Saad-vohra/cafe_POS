@@ -155,7 +155,7 @@ const CustomerProfile = () => {
         </div>
 
         <button
-          onClick={() => navigate('/customer/reward-qr')}
+          onClick={() => navigate('/customer/rewards')}
           style={{
             width: '100%',
             background: 'var(--light-green)',
@@ -172,7 +172,7 @@ const CustomerProfile = () => {
             gap: 8
           }}
         >
-          <span>📱 Open My Unique Reward QR</span>
+          <span>🎁 View My Reward Milestones →</span>
         </button>
       </div>
 

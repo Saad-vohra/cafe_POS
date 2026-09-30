@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import toast from 'react-hot-toast';
 import { useNavigate } from 'react-router-dom';
-import { QRCodeSVG } from 'qrcode.react';
 
 export default function Customers() {
   const navigate = useNavigate();
@@ -208,27 +207,6 @@ export default function Customers() {
         </div>
 
         <div style={{ display: 'flex', gap: 12 }}>
-          <button
-            onClick={() => navigate('/admin/scan-qr')}
-            style={{
-              background: 'linear-gradient(135deg, #087F45 0%, #055C31 100%)',
-              color: '#FFFFFF',
-              border: 'none',
-              borderRadius: 12,
-              padding: '10px 18px',
-              fontWeight: 800,
-              fontSize: '0.9rem',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              gap: 8,
-              boxShadow: '0 4px 14px rgba(8, 127, 69, 0.25)'
-            }}
-          >
-            <span>📷</span>
-            <span>Scan Customer QR</span>
-          </button>
-
           <button
             onClick={loadCustomers}
             style={{
@@ -616,7 +594,7 @@ export default function Customers() {
                               cursor: 'pointer'
                             }}
                           >
-                            Details & QR
+                            View Details
                           </button>
                         </div>
                       </td>
@@ -1188,37 +1166,6 @@ export default function Customers() {
               >
                 ✕
               </button>
-            </div>
-
-            {/* Scannable Customer QR Box */}
-            <div style={{
-              background: '#F8FAF8',
-              borderRadius: 16,
-              padding: 20,
-              border: '1.5px solid #C7E3D0',
-              textAlign: 'center',
-              marginBottom: 20
-            }}>
-              <div style={{ fontSize: '0.82rem', fontWeight: 700, color: '#087F45', marginBottom: 12 }}>
-                Official Scannable Reward QR
-              </div>
-              <div style={{
-                display: 'inline-block',
-                background: '#FFFFFF',
-                padding: 12,
-                borderRadius: 16,
-                boxShadow: '0 4px 16px rgba(0,0,0,0.06)'
-              }}>
-                <QRCodeSVG
-                  value={window.location.origin + `/admin/scan-qr?token=${encodeURIComponent(selectedCustomer.rewardToken || '')}`}
-                  size={180}
-                  level="H"
-                  fgColor="#087F45"
-                />
-              </div>
-              <div style={{ fontSize: '0.75rem', color: '#64748B', marginTop: 10 }}>
-                Token: <span style={{ fontFamily: 'monospace', fontWeight: 700 }}>{selectedCustomer.rewardToken}</span>
-              </div>
             </div>
 
             {/* Stamps and rewards status */}

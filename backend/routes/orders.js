@@ -380,8 +380,18 @@ router.put('/:id/status', auth, async (req, res) => {
     await order.save();
 
     const io = req.app.get('io');
-    const room = `restaurant-${req.restaurantId}`;
-    io.to(room).emit('order-status-updated', order);
+    if (io) {
+      const room = `restaurant-${req.restaurantId}`;
+      io.to(room).emit('order-status-updated', order);
+      io.emit('order-status-updated', order);
+      io.emit('order-updated', order);
+      if (order.tableNumber) {
+        io.emit(`order-update-table-${order.tableNumber}`, order);
+      }
+      if (order.customerId) {
+        io.emit(`order-update-customer-${order.customerId}`, order);
+      }
+    }
 
     if (status === 'completed' || status === 'cancelled') {
       if (order.tableId) {
@@ -389,7 +399,9 @@ router.put('/:id/status', auth, async (req, res) => {
           { _id: order.tableId, restaurantId: req.restaurantId },
           { status: 'available', currentOrderId: null, customerCount: 0 }
         );
-        io.to(room).emit('table-updated');
+        if (io) {
+          io.emit('table-updated');
+        }
       }
     }
 
