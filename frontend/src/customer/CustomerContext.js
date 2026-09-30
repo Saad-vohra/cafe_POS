@@ -68,6 +68,24 @@ export function CustomerProvider({ children }) {
     };
   }, []);
 
+  const loginCustomer = async (name, phone, tbl) => {
+    try {
+      const targetTable = tbl || tableNumber || 5;
+      const res = await axios.post('/api/customers/session', {
+        name,
+        phone,
+        tableNumber: targetTable
+      });
+      setCustomer(res.data.customer);
+      setTableNumber(targetTable);
+      localStorage.setItem('srms_customer_table', targetTable.toString());
+      return res.data.customer;
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Login failed');
+      throw err;
+    }
+  };
+
   const refreshCustomer = async () => {
     const custId = customer?._id || customer?.customerId;
     if (!custId) return;
