@@ -131,7 +131,7 @@ const CustomerUPIPay = () => {
           <div style={{ fontSize: '2rem', fontWeight: 900, color: 'var(--primary-green)' }}>
             ₹{finalTotal}
           </div>
-          {discountAmount > 0 && (
+          {discountAmount > 0 ? (
             <div style={{
               fontSize: '0.75rem',
               color: 'var(--primary-green)',
@@ -144,7 +144,20 @@ const CustomerUPIPay = () => {
             }}>
               🎁 ₹{discountAmount} off ({selectedReward?.title || selectedReward?.name || '20% OFF'})
             </div>
-          )}
+          ) : selectedReward ? (
+            <div style={{
+              fontSize: '0.75rem',
+              color: 'var(--primary-green)',
+              fontWeight: 700,
+              marginTop: 4,
+              background: 'var(--light-green)',
+              padding: '2px 8px',
+              borderRadius: 6,
+              display: 'inline-block'
+            }}>
+              ☕ Includes Complimentary {selectedReward?.title || selectedReward?.name || 'Free Coffee'} (₹0)
+            </div>
+          ) : null}
         </div>
 
         {/* UPI QR Frame */}

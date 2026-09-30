@@ -37,9 +37,16 @@ const CustomerBillPay = () => {
 
   // Calculate discount based on chosen reward
   let discountAmount = 0;
+  let isFreeItemReward = false;
   if (selectedReward) {
     const titleLower = ((selectedReward.title || selectedReward.name || '') + ' ' + (selectedReward.description || '')).toLowerCase();
     const idLower = (selectedReward.rewardId || '').toLowerCase();
+
+    const isCoffee =
+      selectedReward.rewardType === 'free_item' ||
+      idLower.includes('coffee') ||
+      titleLower.includes('coffee') ||
+      titleLower.includes('espresso');
 
     const is20Percent =
       selectedReward.rewardType === 'discount_percent' ||
@@ -48,23 +55,19 @@ const CustomerBillPay = () => {
       idLower.includes('20') ||
       titleLower.includes('20%');
 
-    const isCoffee =
-      selectedReward.rewardType === 'free_item' ||
-      idLower.includes('coffee') ||
-      titleLower.includes('coffee') ||
-      titleLower.includes('espresso');
-
-    if (is20Percent) {
+    if (isCoffee || selectedReward.rewardType === 'free_item') {
+      // Free item reward: Complimentary physical food/beverage item. No cash deducted from the bill!
+      isFreeItemReward = true;
+      discountAmount = 0;
+    } else if (is20Percent) {
       const pct = selectedReward.rewardValue || 20;
       discountAmount = Math.round(subtotal * (pct / 100));
-    } else if (isCoffee) {
-      discountAmount = Math.min(subtotal, 120); // standard coffee price waiver
-    } else if (selectedReward.rewardValue > 0) {
-      discountAmount = selectedReward.rewardType === 'discount_percent'
-        ? Math.round(subtotal * (selectedReward.rewardValue / 100))
-        : Math.min(subtotal, selectedReward.rewardValue);
+    } else if (selectedReward.rewardType === 'discount_flat') {
+      discountAmount = Math.min(subtotal, selectedReward.rewardValue || 50);
+    } else if (selectedReward.rewardValue > 0 && selectedReward.rewardType === 'discount_percent') {
+      discountAmount = Math.round(subtotal * (selectedReward.rewardValue / 100));
     } else {
-      discountAmount = Math.round(subtotal * 0.20);
+      discountAmount = 0;
     }
   }
 
@@ -250,6 +253,33 @@ const CustomerBillPay = () => {
               </div>
             </div>
           ))}
+
+          {/* Complimentary Free Item Claimed Notification */}
+          {selectedReward && isFreeItemReward && (
+            <div style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              fontSize: '0.88rem',
+              background: '#ecfdf5',
+              padding: '8px 12px',
+              borderRadius: 8,
+              border: '1px dashed #86efac'
+            }}>
+              <div>
+                <span style={{ fontWeight: 700, color: 'var(--primary-green)' }}>
+                  ☕ {selectedReward.title || selectedReward.name || 'Free Coffee'}
+                </span>
+                <span style={{ color: '#047857', marginLeft: 6, fontWeight: 600 }}>×1</span>
+                <div style={{ fontSize: '0.72rem', color: '#047857' }}>
+                  Complimentary Gift (Will be served to table)
+                </div>
+              </div>
+              <div style={{ fontWeight: 800, color: 'var(--primary-green)' }}>
+                ₹0 (FREE)
+              </div>
+            </div>
+          )}
         </div>
 
         <div style={{
@@ -271,18 +301,33 @@ const CustomerBillPay = () => {
           </div>
 
           {selectedReward && (
-            <div style={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              color: 'var(--primary-green)',
-              fontWeight: 700,
-              background: 'var(--light-green)',
-              padding: '6px 10px',
-              borderRadius: 8
-            }}>
-              <span>🎁 Reward Applied ({selectedReward.title || selectedReward.name || '20% OFF'})</span>
-              <span>-₹{discountAmount}</span>
-            </div>
+            isFreeItemReward ? (
+              <div style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                color: 'var(--primary-green)',
+                fontWeight: 700,
+                background: 'var(--light-green)',
+                padding: '6px 10px',
+                borderRadius: 8
+              }}>
+                <span>☕ Complimentary Item ({selectedReward.title || selectedReward.name || 'Free Coffee'})</span>
+                <span style={{ fontWeight: 800 }}>₹0 (FREE)</span>
+              </div>
+            ) : (
+              <div style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                color: 'var(--primary-green)',
+                fontWeight: 700,
+                background: 'var(--light-green)',
+                padding: '6px 10px',
+                borderRadius: 8
+              }}>
+                <span>🎁 Discount Applied ({selectedReward.title || selectedReward.name || '20% OFF'})</span>
+                <span>-₹{discountAmount}</span>
+              </div>
+            )
           )}
 
           <div style={{

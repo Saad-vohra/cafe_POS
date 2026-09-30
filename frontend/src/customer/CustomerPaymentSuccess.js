@@ -79,8 +79,12 @@ const CustomerPaymentSuccess = () => {
 
           {appliedReward && (
             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8, fontSize: '0.85rem', color: 'var(--primary-green)' }}>
-              <span>Reward Applied</span>
-              <span style={{ fontWeight: 700 }}>🎁 {appliedReward.title || appliedReward.name || '20% OFF'}</span>
+              <span>{(appliedReward.rewardType === 'free_item' || appliedReward.title?.toLowerCase().includes('coffee') || appliedReward.rewardId?.includes('coffee')) ? 'Complimentary Gift' : 'Reward Discount'}</span>
+              <span style={{ fontWeight: 700 }}>
+                {(appliedReward.rewardType === 'free_item' || appliedReward.title?.toLowerCase().includes('coffee') || appliedReward.rewardId?.includes('coffee'))
+                  ? `☕ ${appliedReward.title || appliedReward.name || 'Free Coffee'} (FREE)`
+                  : `🎁 ${appliedReward.title || appliedReward.name || '20% OFF'}`}
+              </span>
             </div>
           )}
 

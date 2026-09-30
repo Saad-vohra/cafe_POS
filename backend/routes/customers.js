@@ -336,19 +336,22 @@ router.post('/:id/pay-bill', async (req, res) => {
       }
 
       if (targetRew) {
-        if (targetRew.rewardType === 'discount_percent' || targetRew.rewardValue > 0) {
+        if (targetRew.rewardType === 'free_item' || targetRew.title?.toLowerCase().includes('coffee')) {
+          // Free item benefit e.g. Free coffee - complimentary physical item, does NOT deduct money from food bill
+          discountAmount = 0;
+        } else if (targetRew.rewardType === 'discount_percent' || (targetRew.rewardValue > 0 && targetRew.rewardValue <= 100)) {
           const pct = targetRew.rewardValue || 20;
           discountAmount = Math.round(subtotal * (pct / 100));
-        } else if (targetRew.rewardType === 'free_item') {
-          // Free item benefit e.g. Free coffee (deduct standard coffee value up to subtotal)
-          discountAmount = Math.min(subtotal, 120);
+        } else if (targetRew.rewardType === 'discount_flat') {
+          discountAmount = Math.min(subtotal, targetRew.rewardValue || 50);
         } else {
-          discountAmount = Math.round(subtotal * 0.20);
+          discountAmount = 0;
         }
 
         appliedReward = {
           rewardId: targetRew.rewardId,
           title: targetRew.title || '20% OFF',
+          rewardType: targetRew.rewardType,
           discountAmount
         };
 
