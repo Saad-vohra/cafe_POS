@@ -233,9 +233,9 @@ export default function CustomerHome() {
           <span style={{ fontSize: 18, color: '#B45309', fontWeight: 700 }}>→</span>
         </div>
 
-        {/* CARD 3: Pay Bill */}
+        {/* CARD 3: Call for Bill */}
         <div
-          onClick={() => navigate('/customer/pay')}
+          onClick={() => navigate('/customer/bill')}
           style={{
             background: 'linear-gradient(135deg, #F8FAFC 0%, #EDF2F7 100%)',
             borderRadius: 18,
@@ -260,14 +260,14 @@ export default function CustomerHome() {
               justifyContent: 'center',
               fontSize: 26
             }}>
-              💳
+              🧾
             </div>
             <div>
               <div style={{ fontWeight: 800, fontSize: 16, color: '#1A2E22' }}>
-                Pay Table Bill
+                Call for Bill
               </div>
               <div style={{ fontSize: 13, color: '#5A6E62', marginTop: 2 }}>
-                View table bill, apply discounts & pay with UPI
+                See your running bill and ask a waiter to bring it
               </div>
             </div>
           </div>

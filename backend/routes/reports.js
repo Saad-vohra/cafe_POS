@@ -6,7 +6,10 @@ const { auth, adminOnly } = require('../middleware/auth');
 
 router.get('/daily', auth, adminOnly, async (req, res) => {
   try {
-    const date = req.query.date ? new Date(req.query.date) : new Date();
+    // "2026-10-27" parses as UTC midnight; build the date from its parts so the day
+    // boundaries below are midnight in the restaurant's timezone (see TZ in server.js).
+    const [y, m, d] = String(req.query.date || '').split('-').map(Number);
+    const date = y && m && d ? new Date(y, m - 1, d) : new Date();
     const start = new Date(date); start.setHours(0, 0, 0, 0);
     const end = new Date(date); end.setHours(23, 59, 59, 999);
 
@@ -14,6 +17,8 @@ router.get('/daily', auth, adminOnly, async (req, res) => {
     const orders = await Order.find({ restaurantId: req.restaurantId, createdAt: { $gte: start, $lte: end } });
 
     const totalRevenue = bills.reduce((sum, b) => sum + b.totalAmount, 0);
+    const totalDiscount = bills.reduce((sum, b) => sum + (b.discountAmount || 0), 0);
+    const totalGst = bills.reduce((sum, b) => sum + (b.gstAmount || 0), 0);
     const totalOrders = orders.length;
 
     const itemSales = {};
@@ -33,7 +38,7 @@ router.get('/daily', auth, adminOnly, async (req, res) => {
     const paymentBreakdown = { cash: 0, upi: 0, card: 0 };
     bills.forEach(b => { paymentBreakdown[b.paymentMode] += b.totalAmount; });
 
-    res.json({ date, totalRevenue, totalOrders, completedOrders: bills.length, topItems, paymentBreakdown, bills });
+    res.json({ date, totalRevenue, totalDiscount, totalGst, totalOrders, completedOrders: bills.length, topItems, paymentBreakdown, bills });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }

@@ -129,27 +129,6 @@ const StaffScanQR = () => {
           </button>
         </div>
 
-        {/* Quick Demo Tokens */}
-        <div style={{ marginTop: 12, display: 'flex', alignItems: 'center', gap: 8, fontSize: '0.78rem', color: '#64748b' }}>
-          <span>Demo Quick Paste:</span>
-          <button
-            onClick={() => {
-              setInputToken('REW_DEMO_TOKEN');
-              lookupToken('REW_DEMO_TOKEN');
-            }}
-            style={{
-              background: '#f1f5f9',
-              border: '1px solid #cbd5e1',
-              borderRadius: 6,
-              padding: '2px 8px',
-              cursor: 'pointer',
-              fontSize: '0.75rem',
-              color: '#334155'
-            }}
-          >
-            DEMO (Saad Vohra)
-          </button>
-        </div>
       </div>
 
       {/* Identified Customer Profile Card */}

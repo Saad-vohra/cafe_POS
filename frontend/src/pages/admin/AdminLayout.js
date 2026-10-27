@@ -1,6 +1,7 @@
 import React from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import Sidebar from '../../components/shared/Sidebar';
+import { SocketProvider } from '../../context/SocketContext';
 import Dashboard from './Dashboard';
 import Tables from './Tables';
 import Menu from './Menu';
@@ -9,29 +10,33 @@ import Billing from './Billing';
 import Reports from './Reports';
 import Staff from './Staff';
 import Takeaway from './Takeaway';
+import Settings from './Settings';
 
 import StaffScanQR from './StaffScanQR';
 import Customers from './Customers';
 
 export default function AdminLayout() {
   return (
-    <div className="app-layout">
-      <Sidebar role="admin" />
-      <div className="main-content">
-        <Routes>
-          <Route path="dashboard" element={<Dashboard />} />
-          <Route path="tables" element={<Tables />} />
-          <Route path="takeaway" element={<Takeaway />} />
-          <Route path="menu" element={<Menu />} />
-          <Route path="orders" element={<Orders />} />
-          <Route path="billing" element={<Billing />} />
-          <Route path="customers" element={<Customers />} />
-          <Route path="reports" element={<Reports />} />
-          <Route path="staff" element={<Staff />} />
-          <Route path="scan-qr" element={<StaffScanQR />} />
-          <Route path="*" element={<Navigate to="dashboard" />} />
-        </Routes>
+    <SocketProvider role="admin">
+      <div className="app-layout">
+        <Sidebar role="admin" />
+        <div className="main-content">
+          <Routes>
+            <Route path="dashboard" element={<Dashboard />} />
+            <Route path="tables" element={<Tables />} />
+            <Route path="takeaway" element={<Takeaway />} />
+            <Route path="menu" element={<Menu />} />
+            <Route path="orders" element={<Orders />} />
+            <Route path="billing" element={<Billing />} />
+            <Route path="customers" element={<Customers />} />
+            <Route path="reports" element={<Reports />} />
+            <Route path="staff" element={<Staff />} />
+            <Route path="settings" element={<Settings />} />
+            <Route path="scan-qr" element={<StaffScanQR />} />
+            <Route path="*" element={<Navigate to="dashboard" />} />
+          </Routes>
+        </div>
       </div>
-    </div>
+    </SocketProvider>
   );
 }

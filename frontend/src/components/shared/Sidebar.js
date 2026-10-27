@@ -33,6 +33,7 @@ export default function Sidebar({ role }) {
     { icon: '👥', label: 'Customers', path: '/admin/customers' },
     { icon: '📈', label: 'Reports', path: '/admin/reports' },
     { icon: '🧑‍💼', label: 'Staff', path: '/admin/staff' },
+    { icon: '⚙️', label: 'Settings', path: '/admin/settings' },
   ];
 
   const waiterLinks = [

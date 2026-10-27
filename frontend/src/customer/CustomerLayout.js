@@ -10,7 +10,7 @@ export default function CustomerLayout() {
 
   // If customer is not logged in, redirect to login page preserving table query
   if (!customer) {
-    return <Navigate to={`/customer?table=${tableNumber || 5}`} replace />;
+    return <Navigate to={tableNumber ? `/customer?table=${tableNumber}` : '/customer'} replace />;
   }
 
   const currentPath = location.pathname;
@@ -72,8 +72,8 @@ export default function CustomerLayout() {
           <Outlet />
         </main>
 
-        {/* Floating Cart Pill when items are added (hidden when on /customer/cart or /customer/pay) */}
-        {cartCount > 0 && !currentPath.includes('/cart') && !currentPath.includes('/pay') && (
+        {/* Floating Cart Pill when items are added (hidden when on /customer/cart or /customer/bill) */}
+        {cartCount > 0 && !currentPath.includes('/cart') && !currentPath.includes('/bill') && (
           <div
             className="cust-cart-pill"
             onClick={() => navigate('/customer/cart')}

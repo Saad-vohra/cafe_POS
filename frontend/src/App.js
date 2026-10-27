@@ -19,9 +19,7 @@ import CustomerCart from './customer/CustomerCart';
 import CustomerOrderStatus from './customer/CustomerOrderStatus';
 import CustomerRewards from './customer/CustomerRewards';
 import CustomerRewardQR from './customer/CustomerRewardQR';
-import CustomerBillPay from './customer/CustomerBillPay';
-import CustomerUPIPay from './customer/CustomerUPIPay';
-import CustomerPaymentSuccess from './customer/CustomerPaymentSuccess';
+import CustomerCallBill from './customer/CustomerCallBill';
 import CustomerProfile from './customer/CustomerProfile';
 
 function ProtectedRoute({ children, roles }) {
@@ -51,9 +49,8 @@ function AppRoutes() {
                 <Route path="order-status" element={<CustomerOrderStatus />} />
                 <Route path="rewards" element={<CustomerRewards />} />
                 <Route path="reward-qr" element={<CustomerRewardQR />} />
-                <Route path="pay" element={<CustomerBillPay />} />
-                <Route path="upi-pay" element={<CustomerUPIPay />} />
-                <Route path="payment-success" element={<CustomerPaymentSuccess />} />
+                <Route path="bill" element={<CustomerCallBill />} />
+                <Route path="pay" element={<Navigate to="/customer/bill" replace />} />
                 <Route path="profile" element={<CustomerProfile />} />
                 <Route path="*" element={<Navigate to="/customer/home" />} />
               </Route>

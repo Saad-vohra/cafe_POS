@@ -43,15 +43,23 @@ export default function Staff() {
 
   const handleDelete = async (id) => {
     if (!window.confirm('Remove this staff member?')) return;
-    await axios.delete(`/api/users/${id}`);
-    toast.success('Staff removed');
-    load();
+    try {
+      await axios.delete(`/api/users/${id}`);
+      toast.success('Staff removed');
+      load();
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Could not remove staff member');
+    }
   };
 
   const toggleActive = async (u) => {
-    await axios.put(`/api/users/${u._id}`, { active: !u.active });
-    toast.success(u.active ? 'Account deactivated' : 'Account activated');
-    load();
+    try {
+      await axios.put(`/api/users/${u._id}`, { active: !u.active });
+      toast.success(u.active ? 'Account deactivated' : 'Account activated');
+      load();
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Could not update account');
+    }
   };
 
   const roleColors = { admin: 'badge-purple', waiter: 'badge-blue', kitchen: 'badge-orange' };

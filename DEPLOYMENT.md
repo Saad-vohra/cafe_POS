@@ -71,6 +71,27 @@ URL (comma-separate multiple origins if you add a custom domain later, e.g.
 `https://srms.vercel.app,https://app.yourdomain.com`). Redeploy the backend so the new CORS
 setting takes effect.
 
+> `FRONTEND_URL` is required: the backend refuses requests from any website that is not listed
+> there (plus `localhost:3000` for development). If the app shows network errors after deploying,
+> check that this value exactly matches the address in the browser bar (no trailing slash).
+
+### After the first deploy
+
+1. Log in as admin → **Settings** and enter the restaurant name, address, phone, GSTIN and GST rate.
+   These are printed on every bill (GST is shown as CGST + SGST).
+2. Add the tables in **Tables**. Each table's QR code must open `https://<your-frontend>/customer?table=<number>`;
+   customers can only check in to tables that exist.
+3. If you are upgrading an existing installation, run `npm run fix-bills --prefix backend` once to see
+   bills whose stored total ignored a discount, then `node scripts/fix-discounted-bills.js --apply`
+   (from `backend/`) to correct them.
+
+### How customer payment works
+
+Customers never pay inside the QR app. They tap **Call for Bill**; every waiter/admin screen gets an
+alert and the table shows **Bill requested**. The waiter brings the bill, collects cash / UPI / card,
+and generates the bill in **Billing** — that closes the order, frees the table, applies any loyalty
+reward and awards the stamp.
+
 ---
 
 ## 5. Try it

@@ -1,408 +1,263 @@
-// const express = require('express');
-// const router = express.Router();
-// const Order = require('../models/Order');
-// const Table = require('../models/Table');
-// const { auth } = require('../middleware/auth');
-
-// // Get all orders
-// router.get('/', auth, async (req, res) => {
-//   try {
-//     const filter = { restaurantId: req.restaurantId };
-//     if (req.query.status) filter.status = req.query.status;
-//     if (req.query.tableNumber) filter.tableNumber = req.query.tableNumber;
-//     if (req.query.active === 'true') {
-//       filter.status = { $nin: ['completed', 'cancelled'] };
-//     }
-//     const orders = await Order.find(filter).sort('-createdAt').limit(100);
-//     res.json(orders);
-//   } catch (err) {
-//     res.status(500).json({ message: err.message });
-//   }
-// });
-
-// // Get single order
-// router.get('/:id', auth, async (req, res) => {
-//   try {
-//     const order = await Order.findOne({ _id: req.params.id, restaurantId: req.restaurantId });
-//     if (!order) return res.status(404).json({ message: 'Order not found' });
-//     res.json(order);
-//   } catch (err) {
-//     res.status(500).json({ message: err.message });
-//   }
-// });
-
-// // Create order
-// router.post('/', auth, async (req, res) => {
-//   try {
-//     const order = new Order({
-//       ...req.body,
-//       restaurantId: req.restaurantId,
-//       waiterId: req.user._id,
-//       waiterName: req.user.name
-//     });
-//     await order.save();
-
-//     await Table.findOneAndUpdate(
-//       { _id: req.body.tableId, restaurantId: req.restaurantId },
-//       { status: 'occupied', currentOrderId: order._id, customerCount: req.body.customerCount || 1 }
-//     );
-
-//     const io = req.app.get('io');
-//     const room = `restaurant-${req.restaurantId}`;
-//     io.to(`kitchen-${req.restaurantId}`).emit('new-order', order);
-//     io.to(room).emit('table-updated');
-//     io.to(room).emit('order-created', order);
-
-//     res.status(201).json(order);
-//   } catch (err) {
-//     res.status(400).json({ message: err.message });
-//   }
-// });
-
-// // Update order status
-// router.put('/:id/status', auth, async (req, res) => {
-//   try {
-//     const { status } = req.body;
-//     const order = await Order.findOneAndUpdate(
-//       { _id: req.params.id, restaurantId: req.restaurantId },
-//       { status },
-//       { new: true }
-//     );
-//     if (!order) return res.status(404).json({ message: 'Order not found' });
-
-//     const io = req.app.get('io');
-//     const room = `restaurant-${req.restaurantId}`;
-//     io.to(room).emit('order-status-updated', order);
-
-//     if (status === 'completed' || status === 'cancelled') {
-//       await Table.findOneAndUpdate(
-//         { _id: order.tableId, restaurantId: req.restaurantId },
-//         { status: 'available', currentOrderId: null, customerCount: 0 }
-//       );
-//       io.to(room).emit('table-updated');
-//     }
-
-//     res.json(order);
-//   } catch (err) {
-//     res.status(400).json({ message: err.message });
-//   }
-// });
-
-// // Update order items
-// router.put('/:id', auth, async (req, res) => {
-//   try {
-//     const order = await Order.findOne({ _id: req.params.id, restaurantId: req.restaurantId });
-//     if (!order) return res.status(404).json({ message: 'Order not found' });
-
-//     const update = { ...req.body };
-//     delete update.restaurantId;
-//     Object.assign(order, update);
-//     await order.save();
-
-//     const io = req.app.get('io');
-//     io.to(`kitchen-${req.restaurantId}`).emit('order-updated', order);
-
-//     res.json(order);
-//   } catch (err) {
-//     res.status(400).json({ message: err.message });
-//   }
-// });
-
-// module.exports = router;
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 const express = require('express');
+const mongoose = require('mongoose');
 const router = express.Router();
 const Order = require('../models/Order');
 const Table = require('../models/Table');
-const { auth, optionalAuth } = require('../middleware/auth');
+const MenuItem = require('../models/MenuItem');
 const Customer = require('../models/Customer');
+const { auth, staffOrCustomer, notKitchen } = require('../middleware/auth');
+const rateLimit = require('../middleware/rateLimit');
+const { emitOrder, emitToStaff, publicOrder } = require('../utils/realtime');
+const { toPositiveInt } = require('../utils/validate');
 
-// Get all orders
-router.get('/', optionalAuth, async (req, res) => {
-  try {
-    const filter = {};
-    if (req.restaurantId) filter.restaurantId = req.restaurantId;
-    if (req.query.status) filter.status = req.query.status;
-    if (req.query.tableNumber) filter.tableNumber = parseInt(req.query.tableNumber, 10);
-    if (req.query.orderType) filter.orderType = req.query.orderType;
-    if (req.query.active === 'true') {
-      filter.status = { $nin: ['completed', 'cancelled'] };
-    }
-    const orders = await Order.find(filter).sort('-createdAt').limit(100);
-    res.json(orders);
-  } catch (err) {
-    res.status(500).json({ message: err.message });
-  }
+const ACTIVE = { $nin: ['completed', 'cancelled'] };
+// Statuses staff can set by hand. "completed" only happens through billing.
+const MANUAL_STATUSES = ['pending', 'accepted', 'preparing', 'ready', 'served', 'cancelled'];
+
+const customerOrderLimit = rateLimit({
+  windowMs: 60 * 1000,
+  max: 10,
+  keyFn: (req) => `order:${req.customer?._id || req.ip}`,
+  message: 'Too many orders in a short time. Please ask the staff for help.'
 });
 
-// Get single order
-router.get('/:id', optionalAuth, async (req, res) => {
-  try {
-    const query = { _id: req.params.id };
-    if (req.restaurantId) query.restaurantId = req.restaurantId;
-    const order = await Order.findOne(query);
-    if (!order) return res.status(404).json({ message: 'Order not found' });
-    res.json(order);
-  } catch (err) {
-    res.status(500).json({ message: err.message });
+class OrderError extends Error {
+  constructor(status, message) {
+    super(message);
+    this.status = status;
   }
-});
+}
 
-// Create order (Supports both Staff and Customer Self-Ordering via QR)
-router.post('/', optionalAuth, async (req, res) => {
-  try {
-    const now = new Date();
-    // Mark all initial items as freshly added in batch 1
-    const items = (req.body.items || []).map(item => ({
-      menuItemId: item.menuItemId || item.menu || item._id,
-      name: item.name,
-      price: item.price,
-      quantity: item.quantity,
-      notes: item.notes || '',
+/**
+ * Turns the items a client sent into order lines priced from the menu.
+ * The client only chooses WHAT and HOW MANY — names and prices always come from the database.
+ */
+async function priceItems(rawItems, restaurantId, batchNumber, now) {
+  if (!Array.isArray(rawItems) || rawItems.length === 0) throw new OrderError(400, 'Add at least one item');
+  if (rawItems.length > 100) throw new OrderError(400, 'Too many items in one order');
+
+  const ids = rawItems
+    .map(i => i.menuItemId || i.menu || i._id)
+    .filter(id => id && mongoose.Types.ObjectId.isValid(id));
+  const names = rawItems.map(i => i.name).filter(Boolean);
+  const menu = await MenuItem.find({ restaurantId, $or: [{ _id: { $in: ids } }, { name: { $in: names } }] });
+  const byId = new Map(menu.map(m => [m._id.toString(), m]));
+  const byName = new Map(menu.map(m => [m.name, m]));
+
+  return rawItems.map(raw => {
+    const id = raw.menuItemId || raw.menu || raw._id;
+    const menuItem = (id && byId.get(String(id))) || byName.get(raw.name);
+    if (!menuItem) throw new OrderError(400, `"${raw.name || 'Item'}" is not on the menu`);
+    if (!menuItem.available) throw new OrderError(400, `${menuItem.name} is not available right now`);
+    const quantity = toPositiveInt(raw.quantity, { min: 1, max: 99 });
+    if (!quantity) throw new OrderError(400, `Invalid quantity for ${menuItem.name}`);
+    return {
+      menuItemId: menuItem._id,
+      name: menuItem.name,
+      price: menuItem.price,
+      quantity,
+      notes: String(raw.notes || '').slice(0, 200),
       served: false,
       addedAt: now,
       servedAt: null,
-      batchNumber: 1
-    }));
+      batchNumber
+    };
+  });
+}
 
-    // Ensure restaurantId is always present
-    let restaurantId = req.restaurantId;
-    if (!restaurantId) {
-      const defaultRest = await require('../models/Restaurant').findOne({ active: true });
-      if (defaultRest) restaurantId = defaultRest._id;
+const sendError = (res, err, fallback = 400) => {
+  if (!(err instanceof OrderError)) console.error('Order error:', err);
+  res.status(err.status || fallback).json({ message: err.message });
+};
+
+// List orders. Staff see everything; a customer only sees their own table's orders.
+router.get('/', staffOrCustomer, async (req, res) => {
+  try {
+    const filter = { restaurantId: req.restaurantId };
+    if (req.customer) {
+      filter.tableNumber = req.customerTable;
+      filter.status = ACTIVE;
+    } else {
+      if (req.query.status) filter.status = String(req.query.status);
+      if (req.query.tableNumber) filter.tableNumber = parseInt(req.query.tableNumber, 10);
+      if (req.query.orderType) filter.orderType = String(req.query.orderType);
+      if (req.query.active === 'true') filter.status = ACTIVE;
+    }
+    const orders = await Order.find(filter).sort('-createdAt').limit(100);
+    res.json(req.customer ? orders.map(publicOrder) : orders);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+router.get('/:id', staffOrCustomer, async (req, res) => {
+  try {
+    if (!mongoose.Types.ObjectId.isValid(req.params.id)) return res.status(404).json({ message: 'Order not found' });
+    const order = await Order.findOne({ _id: req.params.id, restaurantId: req.restaurantId });
+    if (!order) return res.status(404).json({ message: 'Order not found' });
+    if (req.customer && order.tableNumber !== req.customerTable) {
+      return res.status(404).json({ message: 'Order not found' });
+    }
+    res.json(req.customer ? publicOrder(order) : order);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// Create an order: waiter/admin from the POS, or a customer from the table QR app.
+// A dine-in table has one open order at a time; new items are appended as a new batch.
+router.post('/', staffOrCustomer, (req, res, next) => (req.customer ? customerOrderLimit(req, res, next) : next()), async (req, res) => {
+  try {
+    if (req.user?.role === 'kitchen') return res.status(403).json({ message: 'Kitchen accounts cannot place orders' });
+
+    const now = new Date();
+    const restaurantId = req.restaurantId;
+    const isTakeaway = !req.customer && req.body.orderType === 'takeaway';
+
+    // Customers can only order for the table their QR session belongs to.
+    const tableNum = isTakeaway
+      ? undefined
+      : toPositiveInt(req.customer ? req.customerTable : req.body.tableNumber, { min: 1, max: 9999 });
+
+    let table = null;
+    if (!isTakeaway) {
+      if (!tableNum) return res.status(400).json({ message: 'Table number is required for dine-in orders' });
+      table = await Table.findOne({ restaurantId, tableNumber: tableNum });
+      if (!table) return res.status(400).json({ message: `Table ${tableNum} does not exist. Please ask the staff.` });
     }
 
-    const isTakeaway = req.body.orderType === 'takeaway';
-    let tableId = req.body.tableId;
-    const tableNum = req.body.tableNumber ? parseInt(req.body.tableNumber, 10) : undefined;
-
-    // If dine-in order and tableNumber is given, ensure table exists and get tableId
-    if (!isTakeaway && tableNum) {
-      let table = await Table.findOne({
-        tableNumber: tableNum,
-        ...(restaurantId ? { restaurantId } : {})
-      });
-
-      if (!table && restaurantId) {
-        // Auto-create table so it can be occupied and tracked
-        table = await Table.create({
-          tableNumber: tableNum,
-          restaurantId,
-          status: 'occupied',
-          customerCount: req.body.customerCount || 1
-        });
-      }
-      if (table) tableId = table._id;
-    }
-
-    // Resolve customer from database if customerId or phone is provided
-    let customerDoc = null;
-    const rawCustomerId = req.body.customerId;
-    if (rawCustomerId) {
-      const isObjectId = require('mongoose').Types.ObjectId.isValid(rawCustomerId);
+    // The customer placing the order (QR app), or the one a waiter linked by phone/ID.
+    let customerDoc = req.customer || null;
+    if (!customerDoc && req.body.customerId) {
+      const raw = String(req.body.customerId);
       customerDoc = await Customer.findOne(
-        isObjectId
-          ? { $or: [{ _id: rawCustomerId }, { customerId: rawCustomerId }] }
-          : { customerId: rawCustomerId }
+        mongoose.Types.ObjectId.isValid(raw) ? { $or: [{ _id: raw }, { customerId: raw }] } : { customerId: raw }
       );
-    } else if (req.body.customerPhone) {
-      customerDoc = await Customer.findOne({ phone: req.body.customerPhone.trim() });
+    } else if (!customerDoc && req.body.customerPhone) {
+      customerDoc = await Customer.findOne({ phone: String(req.body.customerPhone).trim() });
     }
 
-    const customerName = req.body.customerName || customerDoc?.name || (isTakeaway ? 'Takeaway Customer' : `Table ${tableNum || 5} Customer`);
-    const customerPhone = req.body.customerPhone || customerDoc?.phone || '';
+    const notes = String(req.body.notes || '').slice(0, 300);
 
-    // Check if an active non-completed order already exists for this table
-    let existingOrder = null;
-    if (!isTakeaway && tableNum) {
-      existingOrder = await Order.findOne({
-        tableNumber: tableNum,
-        status: { $nin: ['completed', 'cancelled'] },
-        ...(restaurantId ? { restaurantId } : {})
-      }).sort({ createdAt: -1 });
-    }
+    const existingOrder = !isTakeaway
+      ? await Order.findOne({ restaurantId, tableNumber: tableNum, status: ACTIVE }).sort({ createdAt: -1 })
+      : null;
 
     if (existingOrder) {
-      // Append items to the existing order as a new batch!
       const nextBatch = (existingOrder.batchCount || 1) + 1;
-      const batchItems = items.map(it => ({
-        ...it,
-        batchNumber: nextBatch,
-        served: false,
-        addedAt: now
-      }));
+      const batchItems = await priceItems(req.body.items, restaurantId, nextBatch, now);
 
       existingOrder.items.push(...batchItems);
       existingOrder.batchCount = nextBatch;
-      if (req.body.notes) {
-        existingOrder.notes = existingOrder.notes
-          ? `${existingOrder.notes} | ${req.body.notes}`
-          : req.body.notes;
+      if (notes) existingOrder.notes = existingOrder.notes ? `${existingOrder.notes} | ${notes}` : notes;
+      // New food after the table was served: send the order back to the kitchen
+      if (['served', 'ready'].includes(existingOrder.status)) existingOrder.status = 'preparing';
+      if (customerDoc && !existingOrder.customerId) {
+        existingOrder.customerId = customerDoc._id;
+        existingOrder.customerCode = customerDoc.customerId;
       }
-      // If order was already served or ready, reset to preparing so kitchen sees new food to prepare
-      if (existingOrder.status === 'served' || existingOrder.status === 'ready') {
-        existingOrder.status = 'preparing';
-      }
-
       await existingOrder.save();
 
-      // Ensure customer has link to this order
-      if (customerDoc && !customerDoc.orders.includes(existingOrder._id)) {
+      if (customerDoc && !customerDoc.orders.some(id => id.toString() === existingOrder._id.toString())) {
         customerDoc.orders.push(existingOrder._id);
         customerDoc.activeTable = tableNum;
         await customerDoc.save();
       }
 
-      // Socket broadcasts
       const io = req.app.get('io');
-      if (io) {
-        const room = `restaurant-${restaurantId}`;
-        const kitchenRoom = `kitchen-${restaurantId}`;
-        io.to(kitchenRoom).emit('order-updated', existingOrder);
-        io.to(kitchenRoom).emit('new-order', existingOrder);
-        io.emit('order-status-updated', existingOrder);
-        io.to(room).emit('order-updated', existingOrder);
-        io.emit('table-updated');
-        if (customerDoc) {
-          io.emit(`customer-order-created-${customerDoc._id}`, existingOrder);
-        }
-      }
+      emitOrder(io, 'order-updated', existingOrder);
+      emitToStaff(io, restaurantId, 'table-updated');
 
-      return res.status(200).json(existingOrder);
+      return res.status(200).json(req.customer ? publicOrder(existingOrder) : existingOrder);
     }
 
-    // No existing active order: Create new initial order
-    const orderData = {
+    const items = await priceItems(req.body.items, restaurantId, 1, now);
+    const customerName = String(req.body.customerName || customerDoc?.name || (isTakeaway ? 'Takeaway Customer' : `Table ${tableNum} Customer`)).slice(0, 80);
+    const customerPhone = String(customerDoc?.phone || req.body.customerPhone || '').slice(0, 20);
+    const customerCount = toPositiveInt(req.body.customerCount, { min: 1, max: 100 }) || 1;
+
+    const order = new Order({
       restaurantId,
       orderType: isTakeaway ? 'takeaway' : 'dine_in',
       customerName,
       customerPhone,
       customerId: customerDoc ? customerDoc._id : undefined,
-      customerCode: customerDoc ? customerDoc.customerId : (typeof rawCustomerId === 'string' ? rawCustomerId : ''),
-      takeawayToken: req.body.takeawayToken || '',
+      customerCode: customerDoc ? customerDoc.customerId : '',
+      takeawayToken: isTakeaway ? String(req.body.takeawayToken || '').slice(0, 20) : '',
       items,
-      tableId: isTakeaway ? undefined : tableId,
-      tableNumber: isTakeaway ? undefined : tableNum,
-      waiterId: req.user?._id || undefined,
+      tableId: table?._id,
+      tableNumber: tableNum,
+      waiterId: req.user?._id,
       waiterName: req.user?.name || `Self QR (${customerName})`,
-      status: req.body.status && req.body.status !== 'placed' ? req.body.status : 'pending',
-      customerCount: req.body.customerCount || 1,
-      notes: req.body.notes || '',
+      status: 'pending',
+      customerCount,
+      notes,
       batchCount: 1
-    };
-
-    const order = new Order(orderData);
+    });
     await order.save();
 
-    // Link order to customer document and update stats
     if (customerDoc) {
       customerDoc.orders.push(order._id);
       if (tableNum) customerDoc.activeTable = tableNum;
       customerDoc.lastVisit = now;
-      customerDoc.totalVisits = (customerDoc.totalVisits || 0) + 1;
       await customerDoc.save();
     }
 
-    // Occupy table for dine-in orders
-    if (!isTakeaway && tableId) {
-      await Table.findByIdAndUpdate(tableId, {
+    if (table) {
+      await Table.findByIdAndUpdate(table._id, {
         status: 'occupied',
         currentOrderId: order._id,
-        customerCount: req.body.customerCount || 1
+        customerCount,
+        billRequested: false,
+        billRequestedAt: null
       });
     }
 
-    // Broadcast to Kitchen, Orders, Waiter, and Billing via Socket.io
     const io = req.app.get('io');
-    if (io) {
-      const room = `restaurant-${restaurantId}`;
-      const kitchenRoom = `kitchen-${restaurantId}`;
+    emitOrder(io, 'new-order', order);
+    emitOrder(io, 'order-created', order);
+    if (table) emitToStaff(io, restaurantId, 'table-updated');
 
-      // Notify Kitchen Display
-      io.to(kitchenRoom).emit('new-order', order);
-      io.emit('new-order', order); // Broadcast so any open kitchen screen picks it up immediately
-
-      // Notify Orders, Tables, and Billing screens
-      if (!isTakeaway) {
-        io.to(room).emit('table-updated');
-        io.emit('table-updated');
-      }
-      io.to(room).emit('order-created', order);
-      io.emit('order-created', order);
-
-      // Customer specific channel
-      if (customerDoc) {
-        io.emit(`customer-order-created-${customerDoc._id}`, order);
-      }
-    }
-
-    res.status(201).json(order);
+    res.status(201).json(req.customer ? publicOrder(order) : order);
   } catch (err) {
-    console.error('Order creation error:', err);
-    res.status(400).json({ message: err.message });
+    sendError(res, err);
   }
 });
 
-// Update order status
+// Update order status (kitchen / waiter / admin). Billing is the only way to complete an order.
 router.put('/:id/status', auth, async (req, res) => {
   try {
     const { status } = req.body;
-    const order = await Order.findOne({ _id: req.params.id, restaurantId: req.restaurantId });
-    if (!order) return res.status(404).json({ message: 'Order not found' });
+    if (!MANUAL_STATUSES.includes(status)) {
+      return res.status(400).json({ message: status === 'completed' ? 'Generate the bill to complete an order' : 'Invalid status' });
+    }
+    if (status === 'cancelled' && req.user.role === 'kitchen') {
+      return res.status(403).json({ message: 'Only a waiter or admin can cancel an order' });
+    }
 
-    // When order is marked served, mark ALL unserved items as served
+    const order = await Order.findOne({ _id: req.params.id, restaurantId: req.restaurantId, status: ACTIVE });
+    if (!order) return res.status(404).json({ message: 'Order not found or already closed' });
+
     if (status === 'served') {
-      order.items = order.items.map(item => ({
-        ...item.toObject(),
-        served: true,
-        servedAt: item.servedAt || new Date()
-      }));
+      order.items.forEach(item => {
+        item.served = true;
+        item.servedAt = item.servedAt || new Date();
+      });
     }
 
     order.status = status;
+    if (status === 'cancelled') order.billRequested = false;
     await order.save();
 
     const io = req.app.get('io');
-    if (io) {
-      const room = `restaurant-${req.restaurantId}`;
-      io.to(room).emit('order-status-updated', order);
-      io.emit('order-status-updated', order);
-      io.emit('order-updated', order);
-      if (order.tableNumber) {
-        io.emit(`order-update-table-${order.tableNumber}`, order);
-      }
-      if (order.customerId) {
-        io.emit(`order-update-customer-${order.customerId}`, order);
-      }
-    }
+    emitOrder(io, 'order-status-updated', order);
 
-    if (status === 'completed' || status === 'cancelled') {
-      if (order.tableId) {
-        await Table.findOneAndUpdate(
-          { _id: order.tableId, restaurantId: req.restaurantId },
-          { status: 'available', currentOrderId: null, customerCount: 0 }
-        );
-        if (io) {
-          io.emit('table-updated');
-        }
-      }
+    if (status === 'cancelled' && order.tableId) {
+      await Table.findOneAndUpdate(
+        { _id: order.tableId, restaurantId: req.restaurantId, currentOrderId: order._id },
+        { status: 'available', currentOrderId: null, customerCount: 0, billRequested: false, billRequestedAt: null }
+      );
+      emitToStaff(io, req.restaurantId, 'table-updated');
     }
 
     res.json(order);
@@ -411,106 +266,84 @@ router.put('/:id/status', auth, async (req, res) => {
   }
 });
 
-// Update order items — batch-aware merge
-// KEY FIX: We do NOT replace existing item entries.
-// Instead we keep all existing items (preserving their served status) and
-// only ADD new items / increase quantities as a NEW batch entry.
-// This way "Paneer Tikka served (batch 1)" and "Paneer Tikka new (batch 2)"
-// are separate rows, never confused.
-router.put('/:id', auth, async (req, res) => {
+// Waiter edits the items of an open order — batch-aware merge.
+// Existing lines keep their served status; extra quantity becomes a NEW batch line, so
+// "Paneer Tikka served (batch 1)" and "Paneer Tikka new (batch 2)" never get mixed up.
+// Reductions remove unserved quantity only, newest batch first.
+router.put('/:id', auth, notKitchen, async (req, res) => {
   try {
-    const order = await Order.findOne({ _id: req.params.id, restaurantId: req.restaurantId });
-    if (!order) return res.status(404).json({ message: 'Order not found' });
+    const order = await Order.findOne({ _id: req.params.id, restaurantId: req.restaurantId, status: ACTIVE });
+    if (!order) return res.status(404).json({ message: 'Order not found or already closed' });
 
-    const update = { ...req.body };
-    delete update.restaurantId;
-
-    if (update.items && Array.isArray(update.items)) {
+    if (Array.isArray(req.body.items)) {
       const now = new Date();
       const nextBatch = (order.batchCount || 1) + 1;
 
-      // Build a map of existing items keyed by name
-      // We track total quantity already in the order per item name (across all batches)
-      const existingQtyByName = {};
+      // Desired total quantity per dish (the waiter's cart may list a dish more than once)
+      const desiredByName = {};
+      const sampleByName = {};
+      req.body.items.forEach(i => {
+        const qty = toPositiveInt(i.quantity, { min: 1, max: 999 });
+        if (!i.name || !qty) return;
+        desiredByName[i.name] = (desiredByName[i.name] || 0) + qty;
+        if (!sampleByName[i.name] || (i.notes && !sampleByName[i.name].notes)) sampleByName[i.name] = i;
+      });
+
+      const currentByName = {};
       order.items.forEach(item => {
-        existingQtyByName[item.name] = (existingQtyByName[item.name] || 0) + item.quantity;
+        currentByName[item.name] = (currentByName[item.name] || 0) + item.quantity;
       });
 
-      // The incoming update.items from waiter has the TOTAL desired quantities.
-      // We need to figure out the DELTA (what's new) vs what already exists.
-      const newBatchItems = [];
+      // Extra quantity → new batch, priced from the menu
+      const additions = Object.keys(desiredByName)
+        .filter(name => desiredByName[name] > (currentByName[name] || 0))
+        .map(name => ({ ...sampleByName[name], quantity: desiredByName[name] - (currentByName[name] || 0) }));
+      const newBatchItems = additions.length ? await priceItems(additions, req.restaurantId, nextBatch, now) : [];
 
-      update.items.forEach(incomingItem => {
-        const alreadyQty = existingQtyByName[incomingItem.name] || 0;
-        const deltaQty = incomingItem.quantity - alreadyQty;
-
-        if (deltaQty > 0) {
-          // This item has MORE quantity than before — add the extra as a new batch entry
-          newBatchItems.push({
-            menuItemId: incomingItem.menuItemId,
-            name: incomingItem.name,
-            price: incomingItem.price,
-            quantity: deltaQty,        // only the NEW extra quantity
-            notes: incomingItem.notes || '',
-            served: false,
-            addedAt: now,
-            servedAt: null,
-            batchNumber: nextBatch
-          });
-        }
-        // If deltaQty === 0: same quantity as before, nothing to add
-        // If deltaQty < 0: waiter reduced quantity — we mark excess served items as removed
-        // (handled below)
-      });
-
-      // Handle quantity reductions: if waiter reduced an item's quantity,
-      // remove unserved entries for that item starting from the latest batch
-      const incomingQtyByName = {};
-      update.items.forEach(i => { incomingQtyByName[i.name] = i.quantity; });
-
-      // Find items that were removed entirely or reduced
-      let updatedExistingItems = [...order.items.map(i => i.toObject())];
-
-      Object.keys(existingQtyByName).forEach(name => {
-        const desired = incomingQtyByName[name] || 0;
-        const current = existingQtyByName[name];
-        if (desired < current) {
-          // Need to reduce by (current - desired) — remove from unserved items, newest batch first
-          let toRemove = current - desired;
-          // Sort so we remove newest batches first
-          updatedExistingItems = updatedExistingItems
-            .map(item => {
-              if (item.name === name && !item.served && toRemove > 0) {
-                const removeFromThis = Math.min(item.quantity, toRemove);
-                toRemove -= removeFromThis;
-                const newQty = item.quantity - removeFromThis;
-                if (newQty <= 0) return null; // remove entirely
-                return { ...item, quantity: newQty };
-              }
-              return item;
-            })
-            .filter(Boolean);
+      // Reductions → take quantity off unserved lines, newest batch first
+      let items = order.items.map(i => i.toObject());
+      Object.keys(currentByName).forEach(name => {
+        let toRemove = currentByName[name] - (desiredByName[name] || 0);
+        if (toRemove <= 0) return;
+        items = items
+          .sort((a, b) => (b.batchNumber || 1) - (a.batchNumber || 1))
+          .map(item => {
+            if (item.name !== name || item.served || toRemove <= 0) return item;
+            const take = Math.min(item.quantity, toRemove);
+            toRemove -= take;
+            return item.quantity - take > 0 ? { ...item, quantity: item.quantity - take } : null;
+          })
+          .filter(Boolean);
+        if (toRemove > 0) {
+          throw new OrderError(400, `${name} has already been served and can't be reduced further`);
         }
       });
+      items.sort((a, b) => (a.batchNumber || 1) - (b.batchNumber || 1));
 
-      // Also handle completely new items (never existed before)
-      // newBatchItems already handles them above correctly
-
-      // Merge: keep updated existing items + add new batch items
-      update.items = [...updatedExistingItems, ...newBatchItems];
-      update.batchCount = newBatchItems.length > 0 ? nextBatch : (order.batchCount || 1);
-      update.lastUpdatedByWaiter = now;
+      order.items = [...items, ...newBatchItems];
+      if (newBatchItems.length) {
+        order.batchCount = nextBatch;
+        if (['served', 'ready'].includes(order.status)) order.status = 'preparing';
+      }
+      order.lastUpdatedByWaiter = now;
     }
 
-    Object.assign(order, update);
+    if (req.body.notes !== undefined) order.notes = String(req.body.notes).slice(0, 300);
+    const customerCount = toPositiveInt(req.body.customerCount, { min: 1, max: 100 });
+    if (customerCount) order.customerCount = customerCount;
+
+    if (order.items.length === 0) {
+      return res.status(400).json({ message: 'An order needs at least one item. Cancel the order instead.' });
+    }
+
     await order.save();
 
     const io = req.app.get('io');
-    io.to(`kitchen-${req.restaurantId}`).emit('order-updated', order);
+    emitOrder(io, 'order-updated', order);
 
     res.json(order);
   } catch (err) {
-    res.status(400).json({ message: err.message });
+    sendError(res, err);
   }
 });
 

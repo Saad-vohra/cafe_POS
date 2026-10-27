@@ -1,10 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { useCustomer } from './CustomerContext';
 import { getFoodImage } from './foodImages';
 import FoodDetailModal from './FoodDetailModal';
 import axios from 'axios';
-import { io } from 'socket.io-client';
 
 const DEFAULT_CATEGORIES = [
   { id: 'all', label: 'All Items', icon: '🍽️' },
@@ -17,8 +15,7 @@ const DEFAULT_CATEGORIES = [
 ];
 
 export default function CustomerMenu() {
-  const navigate = useNavigate();
-  const { cart, getItemQuantity, addToCart, updateQuantity } = useCustomer();
+  const { getItemQuantity, addToCart, updateQuantity, socket } = useCustomer();
   const [menuItems, setMenuItems] = useState([]);
   const [categories, setCategories] = useState(DEFAULT_CATEGORIES);
   const [loading, setLoading] = useState(true);
@@ -31,9 +28,7 @@ export default function CustomerMenu() {
     try {
       setLoading(true);
       const res = await axios.get('/api/menu');
-      if (res.data && res.data.length > 0) {
-        setMenuItems(res.data);
-      }
+      setMenuItems((res.data || []).filter(item => item.available !== false));
     } catch (err) {
       console.warn('Error fetching menu items:', err.message);
     } finally {
@@ -63,16 +58,20 @@ export default function CustomerMenu() {
   useEffect(() => {
     fetchMenu();
     fetchCategories();
-
-    const socket = io(process.env.REACT_APP_API_URL || 'http://localhost:5000', {
-      transports: ['websocket', 'polling']
-    });
-
-    socket.on('menu-updated', () => fetchMenu());
-    socket.on('categories-updated', () => fetchCategories());
-
-    return () => socket.disconnect();
   }, []);
+
+  // Live menu changes from the admin (price, availability, new dishes)
+  useEffect(() => {
+    if (!socket) return;
+    const onMenu = () => fetchMenu();
+    const onCategories = () => fetchCategories();
+    socket.on('menu-updated', onMenu);
+    socket.on('categories-updated', onCategories);
+    return () => {
+      socket.off('menu-updated', onMenu);
+      socket.off('categories-updated', onCategories);
+    };
+  }, [socket]);
 
   const filteredItems = menuItems.filter(item => {
     const isVeg = item.isVegetarian ?? item.isVeg ?? true;

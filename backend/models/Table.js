@@ -6,7 +6,10 @@ const tableSchema = new mongoose.Schema({
   capacity: { type: Number, default: 4 },
   status: { type: String, enum: ['available', 'occupied', 'reserved'], default: 'available' },
   currentOrderId: { type: mongoose.Schema.Types.ObjectId, ref: 'Order', default: null },
-  customerCount: { type: Number, default: 0 }
+  customerCount: { type: Number, default: 0 },
+  // Set when the customer taps "Call for Bill"; cleared when the bill is generated
+  billRequested: { type: Boolean, default: false },
+  billRequestedAt: { type: Date, default: null }
 }, { timestamps: true });
 
 tableSchema.index({ restaurantId: 1, tableNumber: 1 }, { unique: true });

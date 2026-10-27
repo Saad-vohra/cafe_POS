@@ -1,28 +1,28 @@
 const express = require('express');
 const router = express.Router();
 const Bill = require('../models/Bill');
-const Order = require('../models/Order');
-const Table = require('../models/Table');
-const { auth } = require('../middleware/auth');
+const { auth, notKitchen } = require('../middleware/auth');
+const { billOrder, BillingError } = require('../utils/billing');
 
-router.get('/', auth, async (req, res) => {
+router.get('/', auth, notKitchen, async (req, res) => {
   try {
     const filter = { restaurantId: req.restaurantId };
     if (req.query.date) {
-      const date = new Date(req.query.date);
-      filter.createdAt = {
-        $gte: new Date(date.setHours(0, 0, 0, 0)),
-        $lt: new Date(date.setHours(23, 59, 59, 999))
-      };
+      const [y, m, d] = String(req.query.date).split('-').map(Number);
+      const start = new Date(y, m - 1, d);
+      if (!y || !m || !d || isNaN(start)) return res.status(400).json({ message: 'Invalid date' });
+      const end = new Date(start);
+      end.setHours(23, 59, 59, 999);
+      filter.createdAt = { $gte: start, $lte: end };
     }
-    const bills = await Bill.find(filter).sort('-createdAt').limit(100);
+    const bills = await Bill.find(filter).sort('-createdAt').limit(200);
     res.json(bills);
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
 });
 
-router.get('/:id', auth, async (req, res) => {
+router.get('/:id', auth, notKitchen, async (req, res) => {
   try {
     const bill = await Bill.findOne({ _id: req.params.id, restaurantId: req.restaurantId }).populate('orderId');
     if (!bill) return res.status(404).json({ message: 'Bill not found' });
@@ -32,61 +32,31 @@ router.get('/:id', auth, async (req, res) => {
   }
 });
 
-router.post('/', auth, async (req, res) => {
+// Generate the bill for an order at the POS. Payment is collected by staff (cash / UPI / card);
+// an optional loyalty reward of the linked customer can be applied here.
+router.post('/', auth, notKitchen, async (req, res) => {
   try {
-    const { orderId, paymentMode } = req.body;
-    const order = await Order.findOne({ _id: orderId, restaurantId: req.restaurantId });
-    if (!order) return res.status(404).json({ message: 'Order not found' });
+    const { orderId, paymentMode, rewardId } = req.body;
+    if (!orderId) return res.status(400).json({ message: 'orderId is required' });
 
-    const subtotal = order.totalAmount;
-    const gstRate = req.restaurant?.gstRate ?? 5;
-    const gstAmount = Math.round(subtotal * gstRate / 100);
-    const totalAmount = subtotal + gstAmount;
-
-    const bill = new Bill({
-      restaurantId: req.restaurantId,
-      orderId: order._id,
-      orderNumber: order.orderNumber,
-      orderType: order.orderType || 'dine_in',
-      tableNumber: order.tableNumber,
-      customerName: order.customerName || '',
-      customerPhone: order.customerPhone || '',
-      takeawayToken: order.takeawayToken || '',
-      items: order.items.map(i => ({
-        name: i.name,
-        quantity: i.quantity,
-        price: i.price,
-        total: i.price * i.quantity
-      })),
-      subtotal,
-      gstRate,
-      gstAmount,
-      totalAmount,
+    const result = await billOrder({
+      orderId,
+      restaurant: req.restaurant,
       paymentMode,
-      customerCount: order.customerCount || 1
+      rewardId: rewardId || null,
+      user: req.user,
+      io: req.app.get('io')
     });
-    await bill.save();
 
-    order.status = 'completed';
-    await order.save();
-
-    if (order.tableId) {
-      await Table.findOneAndUpdate(
-        { _id: order.tableId, restaurantId: req.restaurantId },
-        { status: 'available', currentOrderId: null, customerCount: 0 }
-      );
-    }
-
-    const io = req.app.get('io');
-    const room = `restaurant-${req.restaurantId}`;
-    if (order.tableId) {
-      io.to(room).emit('table-updated');
-    }
-    io.to(room).emit('order-status-updated', order);
-    io.to(room).emit('bill-created', bill);
-
-    res.status(201).json(bill);
+    res.status(201).json({
+      ...result.bill.toObject(),
+      stampEarned: result.stampEarned,
+      customerTotalStamps: result.customer?.totalStamps,
+      newlyUnlocked: result.newlyUnlocked.map(r => r.title)
+    });
   } catch (err) {
+    if (err instanceof BillingError) return res.status(err.status).json({ message: err.message });
+    console.error('Billing error:', err);
     res.status(400).json({ message: err.message });
   }
 });

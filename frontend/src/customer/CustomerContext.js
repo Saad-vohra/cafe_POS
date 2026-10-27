@@ -1,290 +1,258 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import axios from 'axios';
 import { io } from 'socket.io-client';
 import toast from 'react-hot-toast';
+import { SOCKET_URL } from '../context/SocketContext';
 
 const CustomerContext = createContext(null);
 
+const STORAGE = {
+  profile: 'srms_customer_profile',
+  token: 'srms_customer_token',
+  table: 'srms_customer_table',
+  cart: 'srms_customer_cart',
+  lastDetails: 'srms_customer_last_details'
+};
+
+const readJSON = (key, fallback) => {
+  try {
+    const saved = localStorage.getItem(key);
+    return saved ? JSON.parse(saved) : fallback;
+  } catch {
+    return fallback;
+  }
+};
+
+const parseTable = (value) => {
+  const n = parseInt(value, 10);
+  return Number.isInteger(n) && n > 0 ? n : null;
+};
+
+// Background refresh is only a safety net — live updates arrive over the socket.
+const POLL_MS = 20000;
+
 export function CustomerProvider({ children }) {
-  const [customer, setCustomer] = useState(() => {
-    try {
-      const saved = localStorage.getItem('srms_customer_profile');
-      return saved ? JSON.parse(saved) : null;
-    } catch {
-      return null;
-    }
-  });
-
+  // The table comes from the QR code (?table=N). A different table than the saved
+  // session means the guest scanned a new table, so they check in again.
   const [tableNumber, setTableNumber] = useState(() => {
-    // Check URL search param first
-    const params = new URLSearchParams(window.location.search);
-    const tbl = params.get('table');
-    if (tbl) {
-      localStorage.setItem('srms_customer_table', tbl);
-      return parseInt(tbl, 10);
+    const fromUrl = parseTable(new URLSearchParams(window.location.search).get('table'));
+    const saved = parseTable(localStorage.getItem(STORAGE.table));
+    if (fromUrl && fromUrl !== saved) {
+      localStorage.removeItem(STORAGE.token);
+      localStorage.removeItem(STORAGE.profile);
+      localStorage.setItem(STORAGE.table, String(fromUrl));
+      return fromUrl;
     }
-    const saved = localStorage.getItem('srms_customer_table');
-    return saved ? parseInt(saved, 10) : 5; // default to table 5
+    return fromUrl || saved;
   });
 
-  const [cart, setCart] = useState(() => {
-    try {
-      const saved = localStorage.getItem('srms_customer_cart');
-      return saved ? JSON.parse(saved) : [];
-    } catch {
-      return [];
-    }
-  });
-
+  const [token, setToken] = useState(() => localStorage.getItem(STORAGE.token));
+  const [customer, setCustomer] = useState(() => (localStorage.getItem(STORAGE.token) ? readJSON(STORAGE.profile, null) : null));
+  const [cart, setCart] = useState(() => readJSON(STORAGE.cart, []));
   const [activeOrders, setActiveOrders] = useState([]);
   const [activeOrder, setActiveOrder] = useState(null);
   const [socket, setSocket] = useState(null);
-  const [loyaltySettings, setLoyaltySettings] = useState({
-    stampsPerCard: 8,
-    milestones: [
-      {
-        milestoneId: 'milestone_coffee_4',
-        requiredStamps: 4,
-        title: 'Free Coffee',
-        description: 'Get a complimentary freshly brewed espresso or cappuccino',
-        rewardType: 'free_item',
-        rewardValue: 0,
-        icon: '☕',
-        isActive: true
-      },
-      {
-        milestoneId: 'milestone_discount_8',
-        requiredStamps: 8,
-        title: '20% OFF',
-        description: 'Enjoy 20% off your entire dining bill',
-        rewardType: 'discount_percent',
-        rewardValue: 20,
-        icon: '🏷️',
-        isActive: true
-      }
-    ]
-  });
+  const [restaurantInfo, setRestaurantInfo] = useState({ name: '', gstRate: 5 });
+  const [loyaltySettings, setLoyaltySettings] = useState({ stampsPerCard: 8, milestones: [] });
+  const tokenRef = useRef(token);
+  tokenRef.current = token;
 
-  // Load loyalty program settings from backend on mount
-  useEffect(() => {
-    const loadLoyaltySettings = async () => {
-      try {
-        const res = await axios.get('/api/loyalty-settings');
-        if (res.data) {
-          setLoyaltySettings(res.data);
-        }
-      } catch (err) {
-        console.warn('Could not load dynamic loyalty settings:', err.message);
-      }
-    };
-    loadLoyaltySettings();
+  const logoutCustomer = useCallback(() => {
+    setCustomer(null);
+    setToken(null);
+    setCart([]);
+    setActiveOrder(null);
+    setActiveOrders([]);
+    localStorage.removeItem(STORAGE.profile);
+    localStorage.removeItem(STORAGE.token);
   }, []);
 
-  // Sync cart to localStorage
+  // Customer requests carry the session token instead of a staff login.
+  // Registered during the first render (not in an effect) because child screens'
+  // effects run before this provider's effects and their first requests need the token.
+  const logoutRef = useRef(logoutCustomer);
+  logoutRef.current = logoutCustomer;
+  const interceptors = useRef(null);
+  const registerInterceptors = () => {
+    if (interceptors.current) return;
+    interceptors.current = {
+      req: axios.interceptors.request.use(config => {
+        if (tokenRef.current) {
+          config.headers['X-Customer-Token'] = tokenRef.current;
+          delete config.headers.Authorization;
+        }
+        return config;
+      }),
+      res: axios.interceptors.response.use(
+        res => res,
+        err => {
+          if (err.response?.status === 401 && err.response?.data?.code === 'CUSTOMER_SESSION' && tokenRef.current) {
+            logoutRef.current();
+            toast.error('Your table session expired. Please check in again.', { id: 'customer-session' });
+          }
+          return Promise.reject(err);
+        }
+      )
+    };
+  };
+  registerInterceptors();
   useEffect(() => {
-    localStorage.setItem('srms_customer_cart', JSON.stringify(cart));
+    registerInterceptors();
+    return () => {
+      axios.interceptors.request.eject(interceptors.current.req);
+      axios.interceptors.response.eject(interceptors.current.res);
+      interceptors.current = null;
+    };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Public restaurant info and loyalty program (shown before check-in too)
+  useEffect(() => {
+    axios.get('/api/restaurant/public').then(r => r.data && setRestaurantInfo(r.data)).catch(() => {});
+    axios.get('/api/loyalty-settings').then(r => r.data && setLoyaltySettings(r.data)).catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    localStorage.setItem(STORAGE.cart, JSON.stringify(cart));
   }, [cart]);
 
-  // Sync customer to localStorage
   useEffect(() => {
-    if (customer) {
-      localStorage.setItem('srms_customer_profile', JSON.stringify(customer));
-    } else {
-      localStorage.removeItem('srms_customer_profile');
-    }
+    if (customer) localStorage.setItem(STORAGE.profile, JSON.stringify(customer));
+    else localStorage.removeItem(STORAGE.profile);
   }, [customer]);
 
-  // Socket connection for live updates
+  // One socket per session: the server joins it to this customer's and this table's rooms.
   useEffect(() => {
-    const s = io(process.env.REACT_APP_API_URL || 'http://localhost:5000', {
+    const s = io(SOCKET_URL, {
+      auth: { customerToken: token },
       transports: ['websocket', 'polling'],
       reconnectionAttempts: 10,
       reconnectionDelay: 1000
     });
     setSocket(s);
-
-    return () => {
-      s.disconnect();
-    };
-  }, []);
+    return () => s.disconnect();
+  }, [token]);
 
   const loginCustomer = async (name, phone, tbl) => {
+    const targetTable = parseTable(tbl || tableNumber);
     try {
-      const targetTable = tbl || tableNumber || 5;
-      const res = await axios.post('/api/customers/session', {
-        name,
-        phone,
-        tableNumber: targetTable
-      });
+      const res = await axios.post('/api/customers/session', { name, phone, tableNumber: targetTable });
+      localStorage.setItem(STORAGE.token, res.data.token);
+      localStorage.setItem(STORAGE.table, String(res.data.tableNumber));
+      localStorage.setItem(STORAGE.lastDetails, JSON.stringify({ name, phone }));
+      tokenRef.current = res.data.token;
+      setToken(res.data.token);
       setCustomer(res.data.customer);
-      setTableNumber(targetTable);
-      localStorage.setItem('srms_customer_table', targetTable.toString());
+      setTableNumber(res.data.tableNumber);
+      if (res.data.restaurant) setRestaurantInfo(res.data.restaurant);
       return res.data.customer;
     } catch (err) {
-      toast.error(err.response?.data?.message || 'Login failed');
+      toast.error(err.response?.data?.message || 'Could not check in. Please try again.');
       throw err;
     }
   };
 
-  const refreshCustomer = async () => {
-    const custId = customer?._id || customer?.customerId;
-    if (!custId) return;
+  const refreshCustomer = useCallback(async () => {
+    if (!tokenRef.current || !customer?._id) return;
     try {
-      const res = await axios.get(`/api/customers/${custId}`);
-      if (res.data) {
-        setCustomer(prev => {
-          if (prev && res.data.totalStamps !== prev.totalStamps) {
-            toast.success(`🎉 Stamp Card Updated! Total: ${res.data.totalStamps} Stamps`, {
-              icon: '🎁',
-              id: 'stamp-toast'
-            });
-          }
-          return res.data;
-        });
-      }
-    } catch (err) {
-      // Quietly ignore network blip
+      const res = await axios.get(`/api/customers/${customer._id}`);
+      if (res.data) setCustomer(res.data);
+    } catch {
+      // network blip — next poll or socket event will catch up
     }
-  };
+  }, [customer?._id]);
 
-  const refreshActiveOrders = async () => {
+  const refreshActiveOrders = useCallback(async () => {
+    if (!tokenRef.current) return;
     try {
-      const tbl = tableNumber || 5;
-      const res = await axios.get(`/api/orders?tableNumber=${tbl}&active=true`);
-      if (res.data && res.data.length > 0) {
-        setActiveOrders(res.data);
-        setActiveOrder(res.data[0]);
-      } else {
-        setActiveOrders([]);
-        setActiveOrder(null);
-      }
-    } catch (err) {
+      const res = await axios.get('/api/orders?active=true');
+      setActiveOrders(res.data || []);
+      setActiveOrder(res.data?.[0] || null);
+    } catch {
       // ignore
     }
-  };
+  }, []);
 
   useEffect(() => {
     refreshActiveOrders();
-  }, [tableNumber]);
+  }, [token, refreshActiveOrders]);
 
-  // Listen to customer profile updates & order status
+  // Live updates for this customer and table
   useEffect(() => {
     if (!socket || !customer) return;
 
-    const handleCustomerUpdate = (updated) => {
-      if (!updated) return;
-      const isMatch =
-        (customer._id && updated._id === customer._id) ||
-        (customer.customerId && updated.customerId === customer.customerId) ||
-        (customer.phone && updated.phone === customer.phone);
-
-      if (isMatch) {
-        setCustomer(updated);
-        toast.success(`🎉 Loyalty Stamps Updated! Total: ${updated.totalStamps}`, {
-          icon: '🎁',
-          id: 'stamp-toast'
-        });
-      }
+    const onCustomerUpdate = (updated) => {
+      setCustomer(prev => {
+        if (prev && updated.totalStamps > (prev.totalStamps || 0)) {
+          toast.success(`🎉 Stamp added! You now have ${updated.totalStamps} stamps`, { icon: '🎁', id: 'stamp-toast' });
+        }
+        return updated;
+      });
     };
 
-    if (customer._id) {
-      socket.on(`customer-update-${customer._id}`, handleCustomerUpdate);
-    }
-    if (customer.customerId) {
-      socket.on(`customer-update-${customer.customerId}`, handleCustomerUpdate);
-    }
-    if (customer.phone) {
-      socket.on(`customer-update-${customer.phone}`, handleCustomerUpdate);
-    }
-
-    socket.on('customer-stamp-added', (data) => {
-      if (
-        data.customerId === customer.customerId ||
-        data.phone === customer.phone ||
-        data._id === customer._id
-      ) {
-        if (data.customer) {
-          handleCustomerUpdate(data.customer);
-        } else {
-          refreshCustomer();
+    const onOrderChange = (order) => {
+      if (order.status === 'completed' || order.status === 'cancelled') {
+        setActiveOrders(prev => prev.filter(o => o._id !== order._id));
+        setActiveOrder(prev => (prev?._id === order._id ? null : prev));
+        if (order.status === 'completed') {
+          toast.success('🧾 Your bill has been settled. Thank you for dining with us!', { duration: 6000, id: 'bill-settled' });
         }
+        return;
       }
-    });
+      setActiveOrder(order);
+      setActiveOrders(prev => {
+        const exists = prev.some(o => o._id === order._id);
+        return exists ? prev.map(o => (o._id === order._id ? order : o)) : [order, ...prev];
+      });
+    };
 
-    socket.on('order-status-updated', (updatedOrder) => {
-      if (
-        (activeOrder && activeOrder._id === updatedOrder._id) ||
-        (updatedOrder.tableNumber === tableNumber && updatedOrder.status !== 'completed')
-      ) {
-        setActiveOrder(updatedOrder);
-        setActiveOrders(prev => {
-          const exists = prev.some(o => o._id === updatedOrder._id);
-          if (exists) {
-            return prev.map(o => (o._id === updatedOrder._id ? updatedOrder : o));
-          }
-          return [updatedOrder, ...prev];
-        });
+    const onStatus = (order) => {
+      onOrderChange(order);
+      if (order.status === 'ready') toast.success('🔔 Your food is ready!', { duration: 5000 });
+      else if (order.status === 'preparing') toast('🍳 The kitchen is now preparing your food', { icon: '👨‍🍳' });
+      else if (order.status === 'served') toast.success('🍽️ Food served! Enjoy your meal.');
+    };
 
-        if (updatedOrder.status === 'ready') {
-          toast.success('🔔 Your food is ready!', { duration: 5000 });
-        } else if (updatedOrder.status === 'preparing') {
-          toast('🍳 The kitchen is now preparing your food', { icon: '👨‍🍳' });
-        } else if (updatedOrder.status === 'served') {
-          toast.success('🍽️ Food served! Enjoy your meal.');
-        }
-      }
-    });
-
+    socket.on('customer-update', onCustomerUpdate);
+    socket.on('order-status-updated', onStatus);
+    socket.on('order-updated', onOrderChange);
+    socket.on('order-created', onOrderChange);
     return () => {
-      if (customer._id) socket.off(`customer-update-${customer._id}`);
-      if (customer.customerId) socket.off(`customer-update-${customer.customerId}`);
-      if (customer.phone) socket.off(`customer-update-${customer.phone}`);
-      socket.off('customer-stamp-added');
-      socket.off('order-status-updated');
+      socket.off('customer-update', onCustomerUpdate);
+      socket.off('order-status-updated', onStatus);
+      socket.off('order-updated', onOrderChange);
+      socket.off('order-created', onOrderChange);
     };
-  }, [socket, customer?._id, customer?.customerId, customer?.phone, activeOrder, tableNumber]);
+  }, [socket, customer?._id]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Real-time sync for loyalty settings updates from Admin
+  // Loyalty settings are public and broadcast when the admin changes them
   useEffect(() => {
     if (!socket) return;
-    const handleSettingsUpdate = (newSettings) => {
-      if (newSettings) {
-        setLoyaltySettings(newSettings);
-        refreshCustomer();
-      }
+    const onSettings = (settings) => {
+      if (settings) setLoyaltySettings(settings);
     };
-    socket.on('loyalty-settings-updated', handleSettingsUpdate);
-    return () => {
-      socket.off('loyalty-settings-updated', handleSettingsUpdate);
-    };
+    socket.on('loyalty-settings-updated', onSettings);
+    return () => socket.off('loyalty-settings-updated', onSettings);
   }, [socket]);
 
-  // AUTO-POLLING & VISIBILITY SYNC
-  // Keeps the stamp card ALWAYS fresh and syncs immediately when admin adds stamp
+  // Safety-net refresh when the tab regains focus, plus a slow background poll
   useEffect(() => {
-    if (!customer?._id && !customer?.customerId) return;
-
-    // Refresh immediately upon mount
+    if (!customer?._id) return;
     refreshCustomer();
-
-    // 1. Sync on window focus or when tab becomes visible
-    const handleSync = () => {
-      refreshCustomer();
+    const sync = () => {
+      if (document.visibilityState === 'visible') {
+        refreshCustomer();
+        refreshActiveOrders();
+      }
     };
-    window.addEventListener('focus', handleSync);
-    document.addEventListener('visibilitychange', handleSync);
-
-    // 2. Poll every 2.5 seconds to guarantee instant visual sync without logout/login
-    const interval = setInterval(() => {
-      refreshCustomer();
-    }, 2500);
-
+    window.addEventListener('focus', sync);
+    document.addEventListener('visibilitychange', sync);
+    const interval = setInterval(sync, POLL_MS);
     return () => {
-      window.removeEventListener('focus', handleSync);
-      document.removeEventListener('visibilitychange', handleSync);
+      window.removeEventListener('focus', sync);
+      document.removeEventListener('visibilitychange', sync);
       clearInterval(interval);
     };
-  }, [customer?._id, customer?.customerId]);
+  }, [customer?._id, refreshCustomer, refreshActiveOrders]);
 
   // Add item with particular dish note
   const addToCart = (item, quantity = 1, dishNote = '') => {
@@ -304,22 +272,21 @@ export function CustomerProvider({ children }) {
       return [
         ...prev,
         {
-          _id: itemId || 'item_' + Math.random().toString(36).substr(2, 7),
+          _id: itemId,
           menuItemId: itemId,
           name: item.name,
           price: item.price,
-          isVegetarian: item.isVegetarian ?? (item.isVeg !== false),
-          image: item.image || item.imageUrl || null,
-          category: item.category || 'Special',
+          isVeg: item.isVeg !== false,
+          image: item.image || null,
+          category: item.category || '',
           quantity,
-          notes: cleanNote // Particular dish note!
+          notes: cleanNote
         }
       ];
     });
     toast.success(`Added ${item.name} to cart!`);
   };
 
-  // Get total quantity of a menu item in cart
   const getItemQuantity = (itemId) => {
     if (!itemId) return 0;
     return cart
@@ -327,117 +294,48 @@ export function CustomerProvider({ children }) {
       .reduce((sum, item) => sum + item.quantity, 0);
   };
 
-  // Update item quantity
   const updateQuantity = (itemId, newQty) => {
     setCart(prev => {
       if (newQty <= 0) {
         return prev.filter(item => item._id !== itemId && item.menuItemId !== itemId);
       }
-      return prev.map(item => {
-        if (item._id === itemId || item.menuItemId === itemId) {
-          return { ...item, quantity: newQty };
-        }
-        return item;
-      });
+      return prev.map(item => (item._id === itemId || item.menuItemId === itemId ? { ...item, quantity: newQty } : item));
     });
   };
 
-  // Update particular dish note
   const updateItemNotes = (itemId, newNote) => {
-    setCart(prev => {
-      return prev.map(item => {
-        if (item._id === itemId || item.menuItemId === itemId) {
-          return { ...item, notes: newNote };
-        }
-        return item;
-      });
-    });
+    setCart(prev => prev.map(item => (item._id === itemId || item.menuItemId === itemId ? { ...item, notes: newNote } : item)));
   };
 
-  // Backward compatibility aliases
+  // Index-based helpers used by the cart screen
   const updateCartQty = (index, delta) => {
-    setCart(prev => {
-      const updated = prev.map((item, i) => {
-        if (i === index) {
-          return { ...item, quantity: item.quantity + delta };
-        }
-        return item;
-      });
-      return updated.filter(item => item.quantity > 0);
-    });
+    setCart(prev => prev
+      .map((item, i) => (i === index ? { ...item, quantity: item.quantity + delta } : item))
+      .filter(item => item.quantity > 0));
   };
 
   const updateDishNote = (index, note) => {
-    setCart(prev => {
-      return prev.map((item, i) => (i === index ? { ...item, notes: note } : item));
-    });
+    setCart(prev => prev.map((item, i) => (i === index ? { ...item, notes: note } : item)));
   };
 
   const clearCart = () => setCart([]);
 
-  const logoutCustomer = () => {
-    setCustomer(null);
-    clearCart();
-    setActiveOrder(null);
-    setActiveOrders([]);
-    localStorage.removeItem('srms_customer_profile');
-  };
-
-  // Helper to fetch live table bill
+  // Running bill for the table (read-only — the waiter collects payment at the POS)
   const fetchTableBill = async () => {
-    if (!customer?._id) {
-      return {
-        hasActiveOrder: false,
-        tableNumber: tableNumber || 5,
-        orders: [],
-        subtotal: 0,
-        tax: 0,
-        total: 0,
-        eligibleRewards: []
-      };
-    }
-
-    try {
-      const res = await axios.get(`/api/customers/${customer._id}/table-bill?tableNumber=${tableNumber || 5}`);
-      return res.data;
-    } catch (err) {
-      console.warn('Backend table bill error:', err.message);
-      return {
-        hasActiveOrder: false,
-        tableNumber: tableNumber || 5,
-        orders: [],
-        subtotal: 0,
-        tax: 0,
-        total: 0,
-        eligibleRewards: []
-      };
-    }
-  };
-
-  // Helper to process payment
-  const processPayment = async ({ paymentMethod, appliedRewardId, discountAmount, finalAmount, subtotal, tax }) => {
-    if (!customer?._id) {
-      return { success: true, message: 'Payment simulated' };
-    }
-
-    const res = await axios.post(`/api/customers/${customer._id}/pay-bill`, {
-      tableNumber: tableNumber || 5,
-      paymentMethod: paymentMethod || 'UPI',
-      appliedRewardId: appliedRewardId || null,
-      discountAmount: discountAmount || 0,
-      subtotal: subtotal || finalAmount,
-      tax: tax || 0
-    });
-
-    if (res.data?.customer) {
-      setCustomer(res.data.customer);
-    }
-    setActiveOrders([]);
-    setActiveOrder(null);
+    const res = await axios.get('/api/customers/me/table-bill');
     return res.data;
   };
 
-  // Next reward milestone helper dynamically using Admin configured milestones and card size
+  // "Call for Bill": alerts the waiters, who bring the bill to the table
+  const callForBill = async ({ paymentPreference, rewardId }) => {
+    const res = await axios.post('/api/customers/me/call-bill', { paymentPreference, rewardId });
+    if (res.data?.order) {
+      setActiveOrder(res.data.order);
+      setActiveOrders(prev => prev.map(o => (o._id === res.data.order._id ? res.data.order : o)));
+    }
+    return res.data;
+  };
+
   const getNextReward = () => {
     const totalStamps = customer?.totalStamps || 0;
     const stampsPerCard = loyaltySettings?.stampsPerCard || 8;
@@ -447,8 +345,6 @@ export function CustomerProvider({ children }) {
 
     const cardCycle = Math.floor(Math.max(0, totalStamps - 1) / stampsPerCard) + 1;
     const currentInCycle = totalStamps === 0 ? 0 : ((totalStamps - 1) % stampsPerCard) + 1;
-
-    // Find next milestone in current card cycle
     const nextMilestone = activeMilestones.find(m => m.requiredStamps > currentInCycle);
 
     if (nextMilestone) {
@@ -459,22 +355,21 @@ export function CustomerProvider({ children }) {
         stampsNeeded: nextMilestone.requiredStamps - currentInCycle,
         icon: nextMilestone.icon || '🎁'
       };
-    } else {
-      // Completed all milestones for this card
-      const highest = activeMilestones[activeMilestones.length - 1];
-      return {
-        cardCycle,
-        rewardName: highest ? highest.title : 'Card Complete!',
-        targetStamps: stampsPerCard,
-        stampsNeeded: 0,
-        icon: highest?.icon || '🎁'
-      };
     }
+    const highest = activeMilestones[activeMilestones.length - 1];
+    return {
+      cardCycle,
+      rewardName: highest ? highest.title : 'Card Complete!',
+      targetStamps: stampsPerCard,
+      stampsNeeded: 0,
+      icon: highest?.icon || '🎁'
+    };
   };
 
+  const gstRate = restaurantInfo.gstRate ?? 5;
   const cartCount = cart.reduce((sum, item) => sum + item.quantity, 0);
   const cartSubtotal = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
-  const cartTax = Math.round(cartSubtotal * 0.05);
+  const cartTax = Math.round(cartSubtotal * gstRate / 100);
   const cartTotal = cartSubtotal + cartTax;
 
   return (
@@ -483,6 +378,8 @@ export function CustomerProvider({ children }) {
         customer,
         tableNumber,
         setTableNumber,
+        restaurantInfo,
+        gstRate,
         cart,
         cartCount,
         cartSubtotal,
@@ -492,8 +389,10 @@ export function CustomerProvider({ children }) {
         setActiveOrders,
         activeOrder,
         setActiveOrder,
+        socket,
         loginCustomer,
         refreshCustomer,
+        refreshActiveOrders,
         addToCart,
         getItemQuantity,
         updateQuantity,
@@ -503,7 +402,7 @@ export function CustomerProvider({ children }) {
         clearCart,
         logoutCustomer,
         fetchTableBill,
-        processPayment,
+        callForBill,
         getNextReward,
         loyaltySettings,
         setLoyaltySettings

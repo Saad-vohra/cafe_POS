@@ -71,10 +71,10 @@ const CustomerProfile = () => {
         </div>
 
         <h3 style={{ fontSize: '1.3rem', fontWeight: 800, color: '#1e293b', marginBottom: 4 }}>
-          {customer?.name || 'Saad Vohra'}
+          {customer?.name || 'Guest'}
         </h3>
         <p style={{ color: '#64748b', fontSize: '0.88rem', margin: '0 0 12px 0' }}>
-          {customer?.phone || '+91 98765 43210'}
+          {customer?.phone}
         </p>
 
         {/* Current Table Badge */}
@@ -90,7 +90,7 @@ const CustomerProfile = () => {
           fontWeight: 700
         }}>
           <span>🪑</span>
-          <span>Seated at Table {tableNumber || 5}</span>
+          <span>Seated at Table {tableNumber}</span>
         </div>
       </div>
 

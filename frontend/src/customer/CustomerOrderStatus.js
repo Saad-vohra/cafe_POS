@@ -1,8 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useCustomer } from './CustomerContext';
-import axios from 'axios';
-import { io } from 'socket.io-client';
 
 const STATUS_STEPS = [
   { key: 'placed', label: 'Order Received', icon: '📝', desc: 'Received by kitchen counter' },
@@ -22,7 +20,7 @@ const getStepIndex = (status) => {
 const CustomerOrderStatus = () => {
   const location = useLocation();
   const navigate = useNavigate();
-  const { customer, tableNumber, activeOrders } = useCustomer();
+  const { tableNumber, activeOrders, refreshActiveOrders } = useCustomer();
 
   // Pick order from route state or first active order from context
   const [justPlaced, setJustPlaced] = useState(Boolean(location.state?.justPlaced));
@@ -30,58 +28,11 @@ const CustomerOrderStatus = () => {
     location.state?.order || (activeOrders && activeOrders.length > 0 ? activeOrders[0] : null)
   );
 
-  // Function to fetch latest live status from backend
-  const fetchLiveStatus = async () => {
-    try {
-      const tbl = tableNumber || 5;
-      const res = await axios.get(`/api/orders?tableNumber=${tbl}&active=true`);
-      if (res.data && res.data.length > 0) {
-        setCurrentOrder(res.data[0]);
-      } else if (currentOrder && currentOrder._id) {
-        // Check this specific order directly
-        const single = await axios.get(`/api/orders/${currentOrder._id}`);
-        if (single.data) setCurrentOrder(single.data);
-      }
-    } catch {
-      // quiet
-    }
-  };
-
-  // 1. Live WebSocket listener for instant zero-refresh status updates
+  // Live status comes from the shared customer socket (CustomerContext); refresh once on open
   useEffect(() => {
-    const socket = io(process.env.REACT_APP_API_URL || 'http://localhost:5000', {
-      transports: ['websocket', 'polling']
-    });
+    refreshActiveOrders();
+  }, [refreshActiveOrders]);
 
-    const handleOrderUpdate = (updatedOrder) => {
-      if (!updatedOrder) return;
-      const isMatch =
-        (currentOrder && currentOrder._id === updatedOrder._id) ||
-        (updatedOrder.tableNumber === (tableNumber || 5));
-
-      if (isMatch) {
-        setCurrentOrder(updatedOrder);
-      }
-    };
-
-    socket.on('order-status-updated', handleOrderUpdate);
-    socket.on('order-updated', handleOrderUpdate);
-    socket.on(`order-update-table-${tableNumber || 5}`, handleOrderUpdate);
-
-    // 2. Background polling every 2.5s for foolproof live sync
-    fetchLiveStatus();
-    const interval = setInterval(fetchLiveStatus, 2500);
-
-    return () => {
-      socket.off('order-status-updated', handleOrderUpdate);
-      socket.off('order-updated', handleOrderUpdate);
-      socket.off(`order-update-table-${tableNumber || 5}`, handleOrderUpdate);
-      socket.disconnect();
-      clearInterval(interval);
-    };
-  }, [tableNumber, currentOrder?._id]);
-
-  // Keep synced with activeOrders
   useEffect(() => {
     if (activeOrders && activeOrders.length > 0) {
       setCurrentOrder(activeOrders[0]);
@@ -111,7 +62,7 @@ const CustomerOrderStatus = () => {
           No Active Order Yet
         </h3>
         <p style={{ color: '#64748B', fontSize: '0.9rem', maxWidth: 340, margin: '0 auto 20px', lineHeight: 1.4 }}>
-          You have no ongoing kitchen orders for Table {tableNumber || 5}. Browse our menu and order your favorite dishes!
+          You have no ongoing kitchen orders for Table {tableNumber}. Browse our menu and order your favorite dishes!
         </p>
         <button
           onClick={() => navigate('/customer/menu')}
@@ -204,7 +155,7 @@ const CustomerOrderStatus = () => {
               #{currentOrder?.orderNumber || (currentOrder?._id ? currentOrder._id.slice(-6).toUpperCase() : 'ORD')}
             </div>
             <div style={{ fontSize: '0.8rem', color: '#64748b', marginTop: 2 }}>
-              Table {tableNumber || currentOrder?.tableNumber || 5} • {new Date(currentOrder?.createdAt || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+              Table {tableNumber || currentOrder?.tableNumber} • {new Date(currentOrder?.createdAt || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
             </div>
           </div>
 
@@ -356,17 +307,17 @@ const CustomerOrderStatus = () => {
         </div>
       </div>
 
-      {/* Action Buttons: Add More Items OR Pay Bill */}
+      {/* Action Buttons: Add More Items OR Call for Bill */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
         <button
           className="btn-customer-primary"
-          onClick={() => navigate('/customer/pay')}
+          onClick={() => navigate('/customer/bill')}
           style={{
             background: 'linear-gradient(135deg, #087F45 0%, #0d9488 100%)',
             boxShadow: '0 6px 18px rgba(8,127,69,0.3)'
           }}
         >
-          Pay Bill / Settle Table 💳
+          🙋 Call for Bill
         </button>
 
         <button

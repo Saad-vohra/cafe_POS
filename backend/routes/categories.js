@@ -3,6 +3,7 @@ const router = express.Router();
 const Category = require('../models/Category');
 const MenuItem = require('../models/MenuItem');
 const { auth, optionalAuth, adminOnly } = require('../middleware/auth');
+const { escapeRegex } = require('../utils/validate');
 
 // 1. Get all active categories (public for customers and staff)
 router.get('/', optionalAuth, async (req, res) => {
@@ -25,7 +26,7 @@ router.post('/', auth, adminOnly, async (req, res) => {
     }
 
     const existing = await Category.findOne({
-      name: { $regex: new RegExp(`^${cleanName}$`, 'i') },
+      name: { $regex: new RegExp(`^${escapeRegex(cleanName)}$`, 'i') },
       ...(req.restaurantId ? { restaurantId: req.restaurantId } : {})
     });
 
@@ -58,7 +59,7 @@ router.post('/', auth, adminOnly, async (req, res) => {
 router.put('/:id', auth, adminOnly, async (req, res) => {
   try {
     const { name, icon, sortOrder, isActive } = req.body;
-    const category = await Category.findById(req.params.id);
+    const category = await Category.findOne({ _id: req.params.id, restaurantId: req.restaurantId });
     if (!category) return res.status(404).json({ message: 'Category not found' });
 
     const oldName = category.name;
@@ -72,7 +73,7 @@ router.put('/:id', auth, adminOnly, async (req, res) => {
     // If renamed, update menu items under this category
     if (name && name.trim() !== oldName) {
       await MenuItem.updateMany(
-        { category: oldName },
+        { restaurantId: req.restaurantId, category: oldName },
         { $set: { category: name.trim() } }
       );
     }
@@ -92,10 +93,14 @@ router.put('/:id', auth, adminOnly, async (req, res) => {
 // 4. Admin deletes category
 router.delete('/:id', auth, adminOnly, async (req, res) => {
   try {
-    const category = await Category.findById(req.params.id);
+    const category = await Category.findOne({ _id: req.params.id, restaurantId: req.restaurantId });
     if (!category) return res.status(404).json({ message: 'Category not found' });
 
-    await Category.findByIdAndDelete(req.params.id);
+    const inUse = await MenuItem.countDocuments({ restaurantId: req.restaurantId, category: category.name });
+    if (inUse > 0) {
+      return res.status(400).json({ message: `Move or delete the ${inUse} menu item(s) in "${category.name}" first` });
+    }
+    await category.deleteOne();
 
     const io = req.app.get('io');
     if (io) {

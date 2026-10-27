@@ -5,7 +5,7 @@ import { QRCodeSVG } from 'qrcode.react';
 
 const CustomerRewardQR = () => {
   const navigate = useNavigate();
-  const { customer, tableNumber } = useCustomer();
+  const { customer } = useCustomer();
   const [copied, setCopied] = useState(false);
 
   // The QR value encodes the secure rewardToken lookup URL or raw token
@@ -49,7 +49,7 @@ const CustomerRewardQR = () => {
           {customer?.name || 'Customer'}
         </h3>
         <p style={{ color: '#64748b', fontSize: '0.88rem', margin: '0 0 20px 0' }}>
-          {customer?.phone || '+91 98765 43210'} • ID: {customer?.customerId || 'CUS_10045'}
+          {customer?.phone} • ID: {customer?.customerId}
         </p>
 
         {/* Large Crisp QR Code Frame */}

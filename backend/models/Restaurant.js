@@ -10,7 +10,9 @@ const restaurantSchema = new mongoose.Schema({
   phone: { type: String, default: '' },
   address: { type: String, default: '' },
   gstNumber: { type: String, default: '' },
-  gstRate: { type: Number, default: 5 },
+  gstRate: { type: Number, default: 5, min: 0, max: 28 },
+  fssaiNumber: { type: String, default: '' },
+  receiptFooter: { type: String, default: 'Thank you for dining with us!' },
   currency: { type: String, default: 'INR' },
   active: { type: Boolean, default: true },
 }, { timestamps: true });

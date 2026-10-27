@@ -305,7 +305,7 @@ const CustomerRewards = () => {
 
                 {reward.status === 'available' ? (
                   <button
-                    onClick={() => navigate('/customer/pay')}
+                    onClick={() => navigate('/customer/bill')}
                     style={{
                       background: 'var(--primary-green)',
                       color: '#ffffff',
@@ -317,7 +317,7 @@ const CustomerRewards = () => {
                       cursor: 'pointer'
                     }}
                   >
-                    Apply in Bill →
+                    Use on My Bill →
                   </button>
                 ) : (
                   <span>

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams, Navigate } from 'react-router-dom';
 import { useCustomer } from './CustomerContext';
 import toast from 'react-hot-toast';
 import './customer.css';
@@ -7,13 +7,18 @@ import './customer.css';
 export default function CustomerLogin() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const { loginCustomer, tableNumber, setTableNumber } = useCustomer();
+  const { loginCustomer, tableNumber, customer, restaurantInfo } = useCustomer();
 
   const urlTable = searchParams.get('table');
-  const initialTable = urlTable ? parseInt(urlTable, 10) : (tableNumber || 5);
+  const parsedUrlTable = parseInt(urlTable, 10);
+  const initialTable = Number.isInteger(parsedUrlTable) && parsedUrlTable > 0 ? parsedUrlTable : tableNumber;
 
-  const [name, setName] = useState('');
-  const [phone, setPhone] = useState('');
+  // Returning guests on the same phone don't have to type their details again
+  const lastDetails = (() => {
+    try { return JSON.parse(localStorage.getItem('srms_customer_last_details')) || {}; } catch { return {}; }
+  })();
+  const [name, setName] = useState(lastDetails.name || '');
+  const [phone, setPhone] = useState(lastDetails.phone || '');
   const [loading, setLoading] = useState(false);
 
   const handleSubmit = async (e) => {
@@ -41,6 +46,26 @@ export default function CustomerLogin() {
       setLoading(false);
     }
   };
+
+  // Already checked in at this table
+  if (customer && initialTable && initialTable === tableNumber) {
+    return <Navigate to="/customer/home" replace />;
+  }
+
+  // Opened without a table QR code: we can't tell where to send the food
+  if (!initialTable) {
+    return (
+      <div className="customer-viewport" style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px 16px', background: '#0a2314' }}>
+        <div style={{ width: '100%', maxWidth: 420, background: '#fff', borderRadius: 24, padding: '32px 26px', textAlign: 'center' }}>
+          <div style={{ fontSize: 48, marginBottom: 12 }}>📷</div>
+          <h1 style={{ fontSize: '1.5rem', fontWeight: 800, color: '#1A2E22', marginBottom: 8 }}>Scan your table's QR code</h1>
+          <p style={{ fontSize: '0.92rem', color: '#5A6E62', lineHeight: 1.5 }}>
+            Please scan the QR code placed on your table to view the menu and order. Ask a staff member if you can't find it.
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="customer-viewport" style={{
@@ -103,7 +128,7 @@ export default function CustomerLogin() {
           color: '#1A2E22',
           marginBottom: 6
         }}>
-          Welcome!
+          {restaurantInfo?.name ? `Welcome to ${restaurantInfo.name}` : 'Welcome!'}
         </h1>
         <p style={{
           fontSize: '0.92rem',
@@ -126,7 +151,7 @@ export default function CustomerLogin() {
             </label>
             <input
               type="text"
-              placeholder="e.g. Saad Vohra"
+              placeholder="Your name"
               value={name}
               onChange={e => setName(e.target.value)}
               disabled={loading}

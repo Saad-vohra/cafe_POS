@@ -1,187 +1,10 @@
-// import React, { useEffect, useState } from 'react';
-// import axios from 'axios';
-// import toast from 'react-hot-toast';
-
-// export default function Tables() {
-//   const [tables, setTables] = useState([]);
-//   const [showModal, setShowModal] = useState(false);
-//   const [form, setForm] = useState({ tableNumber: '', capacity: 4 });
-
-//   const load = async () => {
-//     const res = await axios.get('/api/tables');
-//     setTables(res.data);
-//   };
-
-//   useEffect(() => { load(); }, []);
-
-//   const handleAdd = async (e) => {
-//     e.preventDefault();
-//     try {
-//       await axios.post('/api/tables', form);
-//       toast.success('Table added');
-//       setShowModal(false);
-//       setForm({ tableNumber: '', capacity: 4 });
-//       load();
-//     } catch (err) {
-//       toast.error(err.response?.data?.message || 'Error adding table');
-//     }
-//   };
-
-//   const handleDelete = async (id) => {
-//     if (!window.confirm('Delete this table?')) return;
-//     await axios.delete(`/api/tables/${id}`);
-//     toast.success('Table deleted');
-//     load();
-//   };
-
-//   const handleStatusChange = async (id, status) => {
-//     await axios.put(`/api/tables/${id}`, { status });
-//     toast.success('Status updated');
-//     load();
-//   };
-
-//   const available = tables.filter(t => t.status === 'available').length;
-//   const occupied = tables.filter(t => t.status === 'occupied').length;
-
-//   return (
-//     <div>
-//       <div className="page-header">
-//         <h1>Table Management</h1>
-//         <button className="btn btn-primary" onClick={() => setShowModal(true)}>+ Add Table</button>
-//       </div>
-//       <div className="page-body">
-//         <div className="stat-grid">
-//           <div className="stat-card">
-//             <div className="stat-icon blue">🪑</div>
-//             <div><div className="stat-value">{tables.length}</div><div className="stat-label">Total Tables</div></div>
-//           </div>
-//           <div className="stat-card">
-//             <div className="stat-icon green">✅</div>
-//             <div><div className="stat-value">{available}</div><div className="stat-label">Available</div></div>
-//           </div>
-//           <div className="stat-card">
-//             <div className="stat-icon red">🔴</div>
-//             <div><div className="stat-value">{occupied}</div><div className="stat-label">Occupied</div></div>
-//           </div>
-//         </div>
-
-//         <div className="card">
-//           <h3 style={{ marginBottom: 20, fontSize: '1rem', fontFamily: 'Inter', fontWeight: 700 }}>Restaurant Layout</h3>
-//           <div className="table-grid">
-//             {tables.map(t => (
-//               <div key={t._id} className={`table-card ${t.status}`}>
-//                 <div style={{ fontSize: 11, color: '#718096', marginBottom: 4 }}>TABLE</div>
-//                 <div className="table-number">T{t.tableNumber}</div>
-//                 <div style={{ fontSize: 12, marginTop: 6 }}>
-//                   <span className={`table-status-dot dot-${t.status === 'available' ? 'green' : t.status === 'occupied' ? 'red' : 'yellow'}`}></span>
-//                   {t.status}
-//                 </div>
-//                 <div style={{ fontSize: 11, color: '#718096', marginTop: 4 }}>Capacity: {t.capacity}</div>
-//                 <div style={{ marginTop: 10, display: 'flex', gap: 6, justifyContent: 'center', flexWrap: 'wrap' }}>
-//                   {t.status !== 'available' && (
-//                     <button className="btn btn-sm btn-ghost" onClick={() => handleStatusChange(t._id, 'available')} style={{ fontSize: 10, padding: '3px 7px' }}>Free</button>
-//                   )}
-//                   <button className="btn btn-sm btn-danger" onClick={() => handleDelete(t._id)} style={{ fontSize: 10, padding: '3px 7px' }}>Del</button>
-//                 </div>
-//               </div>
-//             ))}
-//           </div>
-//         </div>
-
-//         <div className="card mt-24">
-//           <div className="table-wrapper">
-//             <table>
-//               <thead><tr><th>Table #</th><th>Capacity</th><th>Status</th><th>Customers</th><th>Actions</th></tr></thead>
-//               <tbody>
-//                 {tables.map(t => (
-//                   <tr key={t._id}>
-//                     <td><strong>T{t.tableNumber}</strong></td>
-//                     <td>{t.capacity} seats</td>
-//                     <td>
-//                       <span className={`badge ${t.status === 'available' ? 'badge-green' : t.status === 'occupied' ? 'badge-orange' : 'badge-yellow'}`}>
-//                         {t.status}
-//                       </span>
-//                     </td>
-//                     <td>{t.customerCount || 0}</td>
-//                     <td>
-//                       <div className="flex-gap">
-//                         <select className="form-select" style={{ width: 130, padding: '4px 8px', fontSize: 12 }}
-//                           value={t.status} onChange={e => handleStatusChange(t._id, e.target.value)}>
-//                           <option value="available">Available</option>
-//                           <option value="occupied">Occupied</option>
-//                           <option value="reserved">Reserved</option>
-//                         </select>
-//                         <button className="btn btn-sm btn-danger" onClick={() => handleDelete(t._id)}>Delete</button>
-//                       </div>
-//                     </td>
-//                   </tr>
-//                 ))}
-//               </tbody>
-//             </table>
-//           </div>
-//         </div>
-//       </div>
-
-//       {showModal && (
-//         <div className="modal-overlay" onClick={() => setShowModal(false)}>
-//           <div className="modal" onClick={e => e.stopPropagation()}>
-//             <div className="modal-header">
-//               <h3>Add New Table</h3>
-//               <button className="btn btn-ghost btn-sm" onClick={() => setShowModal(false)}>✕</button>
-//             </div>
-//             <form onSubmit={handleAdd}>
-//               <div className="modal-body">
-//                 <div className="form-group">
-//                   <label className="form-label">Table Number</label>
-//                   <input className="form-input" type="number" placeholder="e.g. 16" required
-//                     value={form.tableNumber} onChange={e => setForm(p => ({ ...p, tableNumber: e.target.value }))} />
-//                 </div>
-//                 <div className="form-group">
-//                   <label className="form-label">Seating Capacity</label>
-//                   <select className="form-select" value={form.capacity} onChange={e => setForm(p => ({ ...p, capacity: e.target.value }))}>
-//                     <option value={2}>2 Seats</option>
-//                     <option value={4}>4 Seats</option>
-//                     <option value={6}>6 Seats</option>
-//                     <option value={8}>8 Seats</option>
-//                     <option value={10}>10 Seats</option>
-//                   </select>
-//                 </div>
-//               </div>
-//               <div className="modal-footer">
-//                 <button type="button" className="btn btn-ghost" onClick={() => setShowModal(false)}>Cancel</button>
-//                 <button type="submit" className="btn btn-primary">Add Table</button>
-//               </div>
-//             </form>
-//           </div>
-//         </div>
-//       )}
-//     </div>
-//   );
-// }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 import React, { useEffect, useState } from 'react';
 import axios from 'axios';
 import toast from 'react-hot-toast';
+import { useSocket } from '../../context/SocketContext';
 
 export default function Tables() {
+  const socket = useSocket();
   const [tables, setTables] = useState([]);
   const [showAddModal, setShowAddModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
@@ -195,6 +18,12 @@ export default function Tables() {
   };
 
   useEffect(() => { load(); }, []);
+
+  useEffect(() => {
+    if (!socket) return;
+    socket.on('table-updated', load);
+    return () => socket.off('table-updated', load);
+  }, [socket]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleAdd = async (e) => {
     e.preventDefault();
@@ -211,15 +40,23 @@ export default function Tables() {
 
   const handleDelete = async (id) => {
     if (!window.confirm('Delete this table?')) return;
-    await axios.delete(`/api/tables/${id}`);
-    toast.success('Table deleted');
-    load();
+    try {
+      await axios.delete(`/api/tables/${id}`);
+      toast.success('Table deleted');
+      load();
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Could not delete the table');
+    }
   };
 
   const handleStatusChange = async (id, status) => {
-    await axios.put(`/api/tables/${id}`, { status });
-    toast.success('Status updated');
-    load();
+    try {
+      await axios.put(`/api/tables/${id}`, { status });
+      toast.success('Status updated');
+      load();
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Could not update the table');
+    }
   };
 
   // ✅ Open edit modal
@@ -283,6 +120,9 @@ export default function Tables() {
                   {t.status}
                 </div>
                 <div style={{ fontSize: 11, color: '#718096', marginTop: 4 }}>Capacity: {t.capacity}</div>
+                {t.billRequested && (
+                  <div className="badge badge-orange" style={{ marginTop: 6, fontWeight: 700 }}>🙋 Bill requested</div>
+                )}
                 <div style={{ marginTop: 10, display: 'flex', gap: 5, justifyContent: 'center', flexWrap: 'wrap' }}>
                   {/* ✅ Edit button in card */}
                   <button

@@ -16,6 +16,7 @@ const CustomerCart = () => {
     clearCart,
     cartSubtotal,
     cartTax,
+    gstRate,
     cartTotal,
     setActiveOrders
   } = useCustomer();
@@ -43,17 +44,11 @@ const CustomerCart = () => {
 
     try {
       const orderPayload = {
-        tableNumber: tableNumber ? parseInt(tableNumber, 10) : 5,
-        orderType: 'dine_in',
-        status: 'pending',
-        customerId: customer?._id || customer?.customerId || '',
-        customerName: customer?.name || 'Customer',
-        customerPhone: customer?.phone || '',
+        // Table, customer and prices are taken from the session and the menu on the server
         items: cart.map(item => ({
-          menuItemId: item._id && !item._id.startsWith('def_') && !item._id.startsWith('item_') ? item._id : undefined,
+          menuItemId: item.menuItemId || item._id,
           name: item.name,
           quantity: item.quantity,
-          price: item.price,
           notes: item.notes || '' // Specific dish note passed directly to kitchen
         }))
       };
@@ -64,7 +59,7 @@ const CustomerCart = () => {
       // Update active orders in context
       if (newOrder) {
         if (typeof setActiveOrders === 'function') {
-          setActiveOrders(prev => [newOrder, ...(Array.isArray(prev) ? prev : [])]);
+          setActiveOrders(prev => [newOrder, ...(Array.isArray(prev) ? prev : []).filter(o => o._id !== newOrder._id)]);
         }
       }
 
@@ -135,11 +130,11 @@ const CustomerCart = () => {
             fontSize: 18,
             fontWeight: 800
           }}>
-            T{tableNumber || 5}
+            T{tableNumber}
           </div>
           <div>
             <div style={{ fontWeight: 800, color: '#1e293b', fontSize: '0.92rem' }}>
-              Dine-In Table {tableNumber || 5}
+              Dine-In Table {tableNumber}
             </div>
             <div style={{ fontSize: '0.78rem', color: '#64748b' }}>
               Ordering for {customer?.name || 'Guest'}
@@ -405,7 +400,7 @@ const CustomerCart = () => {
           </div>
 
           <div style={{ display: 'flex', justifyContent: 'space-between', color: '#64748b' }}>
-            <span>GST & Restaurant Taxes (5%)</span>
+            <span>GST ({gstRate}%)</span>
             <span style={{ fontWeight: 600, color: '#1e293b' }}>₹{cartTax}</span>
           </div>
 

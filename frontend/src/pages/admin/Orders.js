@@ -4,7 +4,8 @@ import toast from 'react-hot-toast';
 
 import { useNavigate } from 'react-router-dom';
 
-const STATUS_FLOW = ['pending', 'accepted', 'preparing', 'ready', 'served', 'completed'];
+// "completed" is not in the manual flow: an order is completed only by generating its bill
+const STATUS_FLOW = ['pending', 'accepted', 'preparing', 'ready', 'served'];
 const STATUS_COLORS = {
   pending: 'badge-orange', accepted: 'badge-blue', preparing: 'badge-purple',
   ready: 'badge-green', served: 'badge-green', completed: 'badge-gray', cancelled: 'badge-red'
@@ -26,18 +27,26 @@ export default function Orders() {
   useEffect(() => { load(); }, [filter]);
 
   const updateStatus = async (id, status) => {
-    await axios.put(`/api/orders/${id}/status`, { status });
-    toast.success(`Order marked as ${status}`);
-    load();
-    if (selected?._id === id) setSelected(null);
+    try {
+      await axios.put(`/api/orders/${id}/status`, { status });
+      toast.success(`Order marked as ${status}`);
+      load();
+      if (selected?._id === id) setSelected(null);
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Could not update the order');
+    }
   };
 
   const cancelOrder = async (id) => {
     if (!window.confirm('Cancel this order?')) return;
-    await axios.put(`/api/orders/${id}/status`, { status: 'cancelled' });
-    toast.success('Order cancelled');
-    load();
-    setSelected(null);
+    try {
+      await axios.put(`/api/orders/${id}/status`, { status: 'cancelled' });
+      toast.success('Order cancelled');
+      load();
+      setSelected(null);
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Could not cancel the order');
+    }
   };
 
   const displayedOrders = orders.filter(o => {
@@ -154,12 +163,17 @@ export default function Orders() {
                     <td onClick={e => e.stopPropagation()}>
                       {!['completed', 'cancelled'].includes(o.status) && (
                         <div className="flex-gap">
-                          {STATUS_FLOW[STATUS_FLOW.indexOf(o.status) + 1] && (
+                          {STATUS_FLOW[STATUS_FLOW.indexOf(o.status) + 1] ? (
                             <button className="btn btn-sm btn-success"
                               onClick={() => updateStatus(o._id, STATUS_FLOW[STATUS_FLOW.indexOf(o.status) + 1])}>
                               → {STATUS_FLOW[STATUS_FLOW.indexOf(o.status) + 1]}
                             </button>
+                          ) : (
+                            <button className="btn btn-sm btn-success" onClick={() => navigate('/admin/billing')}>
+                              💳 Bill
+                            </button>
                           )}
+                          {o.billRequested && <span className="badge badge-orange" title="Customer asked for the bill">🙋 Bill</span>}
                           <button className="btn btn-sm btn-danger" onClick={() => cancelOrder(o._id)}>✕</button>
                         </div>
                       )}

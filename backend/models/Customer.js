@@ -1,5 +1,6 @@
 const mongoose = require('mongoose');
 const crypto = require('crypto');
+const { nextSequence } = require('../utils/sequence');
 
 const customerRewardSchema = new mongoose.Schema({
   rewardId: { type: String, required: true },
@@ -110,8 +111,16 @@ customerSchema.pre('save', async function(next) {
   try {
     if (this.isNew) {
       if (!this.customerId) {
-        const count = await this.constructor.countDocuments();
-        this.customerId = `CUS_${10001 + count}`;
+        const Customer = this.constructor;
+        const seq = await nextSequence('customer', async () => {
+          const existing = await Customer.find({}, { customerId: 1 }).lean();
+          const highest = existing.reduce((max, c) => {
+            const n = parseInt(String(c.customerId || '').replace(/\D/g, ''), 10);
+            return Number.isFinite(n) && n > max ? n : max;
+          }, 10000);
+          return highest;
+        });
+        this.customerId = `CUS_${seq}`;
       }
       if (!this.rewardToken) {
         this.generateFreshRewardToken();

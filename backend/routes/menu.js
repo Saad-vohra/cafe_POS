@@ -2,12 +2,17 @@ const express = require('express');
 const router = express.Router();
 const MenuItem = require('../models/MenuItem');
 const { auth, optionalAuth, adminOnly } = require('../middleware/auth');
+const { escapeRegex } = require('../utils/validate');
+
+const validPrice = (p) => p !== undefined && p !== '' && Number.isFinite(Number(p)) && Number(p) >= 0;
 
 router.get('/', optionalAuth, async (req, res) => {
   try {
     const filter = { restaurantId: req.restaurantId };
     if (req.query.category) filter.category = req.query.category;
     if (req.query.available) filter.available = req.query.available === 'true';
+    // Customers (no staff login) only ever see dishes that can be ordered
+    if (!req.user) filter.available = true;
     if (req.query.isVeg !== undefined) filter.isVeg = req.query.isVeg === 'true';
     const items = await MenuItem.find(filter).sort('category name');
     res.json(items);
@@ -22,7 +27,10 @@ router.post('/', auth, adminOnly, async (req, res) => {
     if (!trimmedName) {
       return res.status(400).json({ message: 'Item name is required' });
     }
-    const escapedName = trimmedName.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, '\\$&');
+    const escapedName = escapeRegex(trimmedName);
+    if (!validPrice(req.body.price)) {
+      return res.status(400).json({ message: 'Enter a valid price' });
+    }
     const existing = await MenuItem.findOne({
       restaurantId: req.restaurantId,
       name: { $regex: new RegExp(`^${escapedName}$`, 'i') }
@@ -47,10 +55,14 @@ router.put('/:id', auth, adminOnly, async (req, res) => {
   try {
     const update = { ...req.body };
     delete update.restaurantId;
+    delete update._id;
+    if (update.price !== undefined && !validPrice(update.price)) {
+      return res.status(400).json({ message: 'Enter a valid price' });
+    }
 
     if (update.name) {
       const trimmedName = update.name.trim();
-      const escapedName = trimmedName.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, '\\$&');
+      const escapedName = escapeRegex(trimmedName);
       const existing = await MenuItem.findOne({
         restaurantId: req.restaurantId,
         _id: { $ne: req.params.id },

@@ -2,23 +2,25 @@ const express = require('express');
 const router = express.Router();
 const LoyaltySetting = require('../models/LoyaltySetting');
 const Customer = require('../models/Customer');
+const { auth, optionalAuth, adminOnly } = require('../middleware/auth');
+const { emitCustomerUpdate } = require('../utils/realtime');
 
-// 1. Get current loyalty program settings
-router.get('/', async (req, res) => {
+// 1. Current loyalty program settings (public: the customer app shows the stamp card)
+router.get('/', optionalAuth, async (req, res) => {
   try {
-    const settings = await LoyaltySetting.getOrCreateDefault(req.query.restaurantId);
+    const settings = await LoyaltySetting.getOrCreateDefault(req.restaurantId);
     res.json(settings);
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
 });
 
-// 2. Admin: Update loyalty program settings (card stamps & reward milestones)
-router.put('/', async (req, res) => {
+// 2. Admin: update loyalty program settings (card stamps & reward milestones)
+router.put('/', auth, adminOnly, async (req, res) => {
   try {
-    const { stampsPerCard, minSpendForStamp, milestones, restaurantId } = req.body;
+    const { stampsPerCard, minSpendForStamp, milestones } = req.body;
 
-    let settings = await LoyaltySetting.getOrCreateDefault(restaurantId);
+    const settings = await LoyaltySetting.getOrCreateDefault(req.restaurantId);
 
     if (stampsPerCard && !isNaN(stampsPerCard)) {
       settings.stampsPerCard = Math.max(2, Math.min(24, parseInt(stampsPerCard, 10)));
@@ -29,42 +31,40 @@ router.put('/', async (req, res) => {
     }
 
     if (Array.isArray(milestones)) {
-      // Validate and clean milestones
-      settings.milestones = milestones.map((m, idx) => ({
-        milestoneId: m.milestoneId || `milestone_${Date.now()}_${idx}`,
-        requiredStamps: Math.max(1, parseInt(m.requiredStamps, 10) || 1),
-        title: (m.title || 'Special Reward').trim(),
-        description: (m.description || '').trim(),
-        rewardType: ['free_item', 'discount_percent', 'discount_flat'].includes(m.rewardType)
+      settings.milestones = milestones.slice(0, 20).map((m, idx) => {
+        const rewardType = ['free_item', 'discount_percent', 'discount_flat'].includes(m.rewardType)
           ? m.rewardType
-          : 'discount_percent',
-        rewardValue: parseFloat(m.rewardValue) || 0,
-        icon: m.icon || (m.rewardType === 'free_item' ? '☕' : '🏷️'),
-        isActive: m.isActive !== false
-      })).sort((a, b) => a.requiredStamps - b.requiredStamps);
+          : 'discount_percent';
+        let rewardValue = Math.max(0, parseFloat(m.rewardValue) || 0);
+        if (rewardType === 'discount_percent') rewardValue = Math.min(100, rewardValue);
+        return {
+          milestoneId: m.milestoneId || `milestone_${Date.now()}_${idx}`,
+          requiredStamps: Math.max(1, parseInt(m.requiredStamps, 10) || 1),
+          title: String(m.title || 'Special Reward').trim().slice(0, 60),
+          description: String(m.description || '').trim().slice(0, 200),
+          rewardType,
+          rewardValue,
+          icon: m.icon || (rewardType === 'free_item' ? '☕' : '🏷️'),
+          isActive: m.isActive !== false
+        };
+      }).sort((a, b) => a.requiredStamps - b.requiredStamps);
     }
 
     await settings.save();
 
     // Sync all customers with updated settings and milestones
     const allCustomers = await Customer.find({});
+    const io = req.app.get('io');
     for (const cust of allCustomers) {
       cust.maxStampsPerCard = settings.stampsPerCard;
       cust.initDefaultRewards(settings);
       cust.evaluateRewards();
       await cust.save();
+      emitCustomerUpdate(io, cust);
     }
 
-    // Broadcast update via socket so all customer apps & admin panels sync in real time
-    const io = req.app.get('io');
-    if (io) {
-      io.emit('loyalty-settings-updated', settings);
-      for (const cust of allCustomers) {
-        io.emit(`customer-update-${cust._id}`, cust);
-        if (cust.customerId) io.emit(`customer-update-${cust.customerId}`, cust);
-        if (cust.phone) io.emit(`customer-update-${cust.phone}`, cust);
-      }
-    }
+    // Loyalty settings are public (shown on every customer's stamp card)
+    if (io) io.emit('loyalty-settings-updated', settings);
 
     res.json({
       success: true,
