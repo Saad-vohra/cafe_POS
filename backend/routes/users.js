@@ -3,8 +3,18 @@ const router = express.Router();
 const bcrypt = require('bcryptjs');
 const User = require('../models/User');
 const { auth, adminOnly } = require('../middleware/auth');
+const { staffRoom } = require('../utils/realtime');
 
 const ROLES = ['admin', 'waiter', 'kitchen'];
+
+// Close the live connection of a staff member who was deactivated or removed, so their
+// open screens stop receiving orders right away (their next request is refused anyway).
+async function disconnectUser(req, userId) {
+  const io = req.app.get('io');
+  if (!io) return;
+  const sockets = await io.in(staffRoom(req.restaurantId)).fetchSockets();
+  sockets.filter(s => s.data.userId === String(userId)).forEach(s => s.disconnect(true));
+}
 const isSelf = (req) => req.params.id === req.user._id.toString();
 
 router.get('/', auth, adminOnly, async (req, res) => {
@@ -61,6 +71,7 @@ router.put('/:id', auth, adminOnly, async (req, res) => {
 
     const user = await User.findOneAndUpdate({ _id: req.params.id, restaurantId: req.restaurantId }, updates, { new: true }).select('-password');
     if (!user) return res.status(404).json({ message: 'User not found' });
+    if (!user.active) await disconnectUser(req, user._id);
     res.json(user);
   } catch (err) {
     res.status(400).json({ message: err.message });
@@ -71,6 +82,7 @@ router.delete('/:id', auth, adminOnly, async (req, res) => {
   try {
     if (isSelf(req)) return res.status(400).json({ message: 'You cannot delete your own account' });
     await User.findOneAndDelete({ _id: req.params.id, restaurantId: req.restaurantId });
+    await disconnectUser(req, req.params.id);
     res.json({ message: 'User deleted' });
   } catch (err) {
     res.status(500).json({ message: err.message });

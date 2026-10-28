@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import axios from 'axios';
 import toast from 'react-hot-toast';
 import { useAuth } from '../../context/AuthContext';
+import PasswordInput from '../../components/shared/PasswordInput';
 
 const FIELDS = [
   { key: 'name', label: 'Restaurant Name', placeholder: 'As printed on the bill', required: true },
@@ -96,17 +97,17 @@ export default function Settings() {
             <h3 style={{ fontFamily: 'Inter', fontWeight: 700, fontSize: '1rem', marginBottom: 16 }}>🔒 Change My Password</h3>
             <div className="form-group">
               <label className="form-label">Current Password</label>
-              <input className="form-input" type="password" required value={pw.currentPassword}
+              <PasswordInput required autoComplete="current-password" value={pw.currentPassword}
                 onChange={e => setPw(p => ({ ...p, currentPassword: e.target.value }))} />
             </div>
             <div className="form-group">
               <label className="form-label">New Password</label>
-              <input className="form-input" type="password" required minLength={8} value={pw.newPassword}
+              <PasswordInput required minLength={8} autoComplete="new-password" value={pw.newPassword}
                 onChange={e => setPw(p => ({ ...p, newPassword: e.target.value }))} />
             </div>
             <div className="form-group">
               <label className="form-label">Confirm New Password</label>
-              <input className="form-input" type="password" required minLength={8} value={pw.confirm}
+              <PasswordInput required minLength={8} autoComplete="new-password" value={pw.confirm}
                 onChange={e => setPw(p => ({ ...p, confirm: e.target.value }))} />
             </div>
             <button type="submit" className="btn btn-primary w-full">Change Password</button>

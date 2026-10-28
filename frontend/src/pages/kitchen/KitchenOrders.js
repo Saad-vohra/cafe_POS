@@ -232,15 +232,22 @@ function KitchenCard({ order, onStatusChange }) {
   );
 }
 
+// One card per order, even if the same order arrives twice (socket reconnect, reload race...).
+const uniqueById = (list) => {
+  const seen = new Set();
+  return list.filter(o => (seen.has(o._id) ? false : seen.add(o._id)));
+};
+
 export default function KitchenOrders() {
-  const [orders, setOrders] = useState([]);
+  const [rawOrders, setOrders] = useState([]);
+  const orders = uniqueById(rawOrders);
   const [filter, setFilter] = useState('active');
   const socket = useSocket();
 
   const load = async () => {
     const res = await axios.get('/api/orders?active=true');
     const active = res.data.filter(o => !['completed', 'cancelled', 'served'].includes(o.status));
-    setOrders(active);
+    setOrders(uniqueById(active));
   };
 
   useEffect(() => { load(); }, []);

@@ -47,7 +47,15 @@ You can use the included `render.yaml` blueprint, or set it up manually.
 6. Deploy. Once live, note your backend URL, e.g. `https://srms-backend.onrender.com`.
 7. Confirm it's healthy by visiting `https://srms-backend.onrender.com/api/health`.
 
-> Render's free tier spins down when idle — the first request after inactivity may take ~30s to wake up. Upgrade to a paid instance for always-on production use.
+> **Free plan sleep:** Render's free tier puts the service to sleep after ~15 minutes without
+> incoming requests (the next request then takes 30–60s). To prevent this, the backend pings its
+> own `/api/health` every 10 minutes using the `RENDER_EXTERNAL_URL` that Render sets
+> automatically — no setup needed; the log shows `Keep-alive: pinging …` on start.
+> As a backup, add a free UptimeRobot (or cron-job.org) HTTP monitor on
+> `https://<your-backend>.onrender.com/api/health` every 5 minutes; it also emails you if the
+> server goes down. Free instances can still be restarted by Render at any time, and one service
+> running all month uses ~744 of the 750 free hours, so keep only one free service on the account.
+> On a paid plan, set `KEEP_ALIVE=false`.
 
 ---
 

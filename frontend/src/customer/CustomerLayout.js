@@ -45,25 +45,6 @@ export default function CustomerLayout() {
             <div className="cust-table-badge">
               <span>🪑</span> Table {tableNumber}
             </div>
-            <button
-              onClick={() => navigate('/customer/reward-qr')}
-              title="My Reward QR"
-              style={{
-                width: 36,
-                height: 36,
-                borderRadius: '50%',
-                background: '#EBF7EE',
-                border: '1.5px solid #C7E3D0',
-                color: '#087F45',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                cursor: 'pointer',
-                fontSize: 16
-              }}
-            >
-              📱
-            </button>
           </div>
         </header>
 

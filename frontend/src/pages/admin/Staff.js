@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import axios from 'axios';
 import toast from 'react-hot-toast';
+import PasswordInput from '../../components/shared/PasswordInput';
 
 const emptyForm = { name: '', email: '', password: '', role: 'waiter' };
 
@@ -141,7 +142,7 @@ export default function Staff() {
                 </div>
                 <div className="form-group">
                   <label className="form-label">Password {editId && <span className="text-muted">(leave blank to keep current)</span>}</label>
-                  <input className="form-input" type="password" placeholder="••••••••" required={!editId}
+                  <PasswordInput placeholder="••••••••" required={!editId} autoComplete="new-password"
                     value={form.password} onChange={e => setForm(p => ({ ...p, password: e.target.value }))} />
                 </div>
                 <div className="form-group">

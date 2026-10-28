@@ -5,6 +5,8 @@ const Customer = require('../models/Customer');
 
 const CUSTOMER_TOKEN_HEADER = 'x-customer-token';
 const CUSTOMER_TOKEN_TTL = '12h';
+// Sent with 401/403 when the staff login itself is no longer valid (expired, deactivated...)
+const SESSION_INVALID = 'SESSION_INVALID';
 
 const getBearer = (req) => req.header('Authorization')?.replace('Bearer ', '') || null;
 
@@ -48,16 +50,16 @@ const signCustomerToken = (customer, restaurantId, tableNumber) =>
 const auth = async (req, res, next) => {
   try {
     const token = getBearer(req);
-    if (!token) return res.status(401).json({ message: 'No token provided' });
+    if (!token) return res.status(401).json({ message: 'No token provided', code: SESSION_INVALID });
 
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
     const user = await User.findById(decoded.id).select('-password');
-    if (!user) return res.status(401).json({ message: 'Invalid token' });
-    if (!user.active) return res.status(403).json({ message: 'Account is deactivated' });
+    if (!user) return res.status(401).json({ message: 'Invalid token', code: SESSION_INVALID });
+    if (!user.active) return res.status(403).json({ message: 'Account is deactivated', code: SESSION_INVALID });
 
     const restaurant = await Restaurant.findById(user.restaurantId);
     if (!restaurant || !restaurant.active) {
-      return res.status(403).json({ message: 'This restaurant account is inactive. Please contact support.' });
+      return res.status(403).json({ message: 'This restaurant account is inactive. Please contact support.', code: SESSION_INVALID });
     }
 
     req.user = user;
@@ -65,7 +67,7 @@ const auth = async (req, res, next) => {
     req.restaurant = restaurant;
     next();
   } catch (err) {
-    res.status(401).json({ message: 'Authentication failed' });
+    res.status(401).json({ message: 'Your session has expired. Please log in again.', code: SESSION_INVALID });
   }
 };
 

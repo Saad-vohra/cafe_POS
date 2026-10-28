@@ -5,7 +5,6 @@ import Sidebar from "../../components/shared/Sidebar";
 
 import WaiterTables from "./WaiterTables";
 import WaiterOrders from "./WaiterOrders";
-import WaiterBilling from "./WaiterBilling";
 
 import { SocketProvider } from "../../context/SocketContext";
 import { useAuth } from "../../context/AuthContext";
@@ -63,16 +62,6 @@ element={<WaiterTables/>}
 path="orders"
 
 element={<WaiterOrders/>}
-
-/>
-
-
-
-<Route
-
-path="billing"
-
-element={<WaiterBilling/>}
 
 />
 

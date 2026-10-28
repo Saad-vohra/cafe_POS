@@ -39,7 +39,6 @@ export default function Sidebar({ role }) {
   const waiterLinks = [
     { icon: '🪑', label: 'Tables', path: '/waiter/tables' },
     { icon: '📋', label: 'My Orders', path: '/waiter/orders' },
-    { icon: '💳', label: 'Billing', path: '/waiter/billing' },
   ];
 
   const kitchenLinks = [

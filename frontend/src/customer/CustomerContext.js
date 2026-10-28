@@ -31,6 +31,47 @@ const parseTable = (value) => {
 // Background refresh is only a safety net — live updates arrive over the socket.
 const POLL_MS = 20000;
 
+// The customer session used by every request while the customer app is open.
+// The interceptors are registered ONCE for the whole page (not per render or per mount),
+// so React's double render in development can't leave behind a copy that sends an old token.
+// Kept on window so a dev hot-reload of this file reuses the same session instead of adding a copy.
+const session = window.__srmsCustomerSession || (window.__srmsCustomerSession = { token: null, onExpired: null });
+
+const sentToken = (config) => {
+  const h = config?.headers;
+  if (!h) return null;
+  return (typeof h.get === 'function' && h.get('X-Customer-Token')) || h['X-Customer-Token'] || null;
+};
+
+// Customer requests carry the session token instead of a staff login.
+if (!session.interceptorsInstalled) {
+  session.interceptorsInstalled = true;
+  axios.interceptors.request.use(config => {
+    if (session.token) {
+      config.headers['X-Customer-Token'] = session.token;
+      delete config.headers.Authorization;
+    }
+    return config;
+  });
+
+  axios.interceptors.response.use(
+    res => res,
+    err => {
+      // Only end the session if the rejected request used the CURRENT token — a late answer
+      // to a request made with an older token must not log out a guest who just checked in.
+      if (
+        err.response?.status === 401 &&
+        err.response?.data?.code === 'CUSTOMER_SESSION' &&
+        session.token &&
+        sentToken(err.config) === session.token
+      ) {
+        session.onExpired?.();
+      }
+      return Promise.reject(err);
+    }
+  );
+}
+
 export function CustomerProvider({ children }) {
   // The table comes from the QR code (?table=N). A different table than the saved
   // session means the guest scanned a new table, so they check in again.
@@ -56,8 +97,12 @@ export function CustomerProvider({ children }) {
   const [loyaltySettings, setLoyaltySettings] = useState({ stampsPerCard: 8, milestones: [] });
   const tokenRef = useRef(token);
   tokenRef.current = token;
+  // Set during render so child screens' first requests (their effects run before ours) carry it
+  session.token = token;
 
   const logoutCustomer = useCallback(() => {
+    session.token = null;
+    tokenRef.current = null;
     setCustomer(null);
     setToken(null);
     setCart([]);
@@ -67,43 +112,18 @@ export function CustomerProvider({ children }) {
     localStorage.removeItem(STORAGE.token);
   }, []);
 
-  // Customer requests carry the session token instead of a staff login.
-  // Registered during the first render (not in an effect) because child screens'
-  // effects run before this provider's effects and their first requests need the token.
-  const logoutRef = useRef(logoutCustomer);
-  logoutRef.current = logoutCustomer;
-  const interceptors = useRef(null);
-  const registerInterceptors = () => {
-    if (interceptors.current) return;
-    interceptors.current = {
-      req: axios.interceptors.request.use(config => {
-        if (tokenRef.current) {
-          config.headers['X-Customer-Token'] = tokenRef.current;
-          delete config.headers.Authorization;
-        }
-        return config;
-      }),
-      res: axios.interceptors.response.use(
-        res => res,
-        err => {
-          if (err.response?.status === 401 && err.response?.data?.code === 'CUSTOMER_SESSION' && tokenRef.current) {
-            logoutRef.current();
-            toast.error('Your table session expired. Please check in again.', { id: 'customer-session' });
-          }
-          return Promise.reject(err);
-        }
-      )
-    };
-  };
-  registerInterceptors();
   useEffect(() => {
-    registerInterceptors();
-    return () => {
-      axios.interceptors.request.eject(interceptors.current.req);
-      axios.interceptors.response.eject(interceptors.current.res);
-      interceptors.current = null;
+    session.token = tokenRef.current;
+    session.onExpired = () => {
+      logoutCustomer();
+      toast.error('Your table session expired. Please check in again.', { id: 'customer-session' });
     };
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+    return () => {
+      // Leaving the customer app (e.g. to the staff login): stop sending the customer token
+      session.token = null;
+      session.onExpired = null;
+    };
+  }, [logoutCustomer]);
 
   // Public restaurant info and loyalty program (shown before check-in too)
   useEffect(() => {
@@ -140,6 +160,7 @@ export function CustomerProvider({ children }) {
       localStorage.setItem(STORAGE.table, String(res.data.tableNumber));
       localStorage.setItem(STORAGE.lastDetails, JSON.stringify({ name, phone }));
       tokenRef.current = res.data.token;
+      session.token = res.data.token;
       setToken(res.data.token);
       setCustomer(res.data.customer);
       setTableNumber(res.data.tableNumber);

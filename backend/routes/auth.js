@@ -51,7 +51,9 @@ router.post('/login', loginLimit, async (req, res) => {
       return res.status(403).json({ message: 'This restaurant account is inactive. Please contact support.' });
     }
 
-    const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET, { expiresIn: '24h' });
+    // POS terminals stay logged in for 30 days. A staff member who leaves is still locked out
+    // immediately: every request re-checks that the account is active (middleware/auth.js).
+    const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET, { expiresIn: '30d' });
     res.json({
       token,
       user: { id: user._id, name: user.name, email: user.email, role: user.role },

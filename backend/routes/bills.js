@@ -1,10 +1,10 @@
 const express = require('express');
 const router = express.Router();
 const Bill = require('../models/Bill');
-const { auth, notKitchen } = require('../middleware/auth');
+const { auth, adminOnly } = require('../middleware/auth');
 const { billOrder, BillingError } = require('../utils/billing');
 
-router.get('/', auth, notKitchen, async (req, res) => {
+router.get('/', auth, adminOnly, async (req, res) => {
   try {
     const filter = { restaurantId: req.restaurantId };
     if (req.query.date) {
@@ -22,7 +22,7 @@ router.get('/', auth, notKitchen, async (req, res) => {
   }
 });
 
-router.get('/:id', auth, notKitchen, async (req, res) => {
+router.get('/:id', auth, adminOnly, async (req, res) => {
   try {
     const bill = await Bill.findOne({ _id: req.params.id, restaurantId: req.restaurantId }).populate('orderId');
     if (!bill) return res.status(404).json({ message: 'Bill not found' });
@@ -32,9 +32,10 @@ router.get('/:id', auth, notKitchen, async (req, res) => {
   }
 });
 
-// Generate the bill for an order at the POS. Payment is collected by staff (cash / UPI / card);
-// an optional loyalty reward of the linked customer can be applied here.
-router.post('/', auth, notKitchen, async (req, res) => {
+// Generate the bill for an order at the POS (admin / cashier only — waiters don't bill).
+// Payment is collected by staff (cash / UPI / card); an optional loyalty reward of the
+// linked customer can be applied here.
+router.post('/', auth, adminOnly, async (req, res) => {
   try {
     const { orderId, paymentMode, rewardId } = req.body;
     if (!orderId) return res.status(400).json({ message: 'orderId is required' });

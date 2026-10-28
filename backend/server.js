@@ -89,6 +89,7 @@ io.use(async (socket, next) => {
   if (staff) {
     socket.data.restaurantId = staff.user.restaurantId.toString();
     socket.data.role = staff.user.role;
+    socket.data.userId = staff.user._id.toString();
     return next();
   }
   const session = await resolveCustomer(customerToken);
@@ -110,11 +111,30 @@ io.on('connection', (socket) => {
   }
 });
 
+// Render's free plan puts a web service to sleep after ~15 minutes without incoming
+// requests. Calling our own public /api/health URL every 10 minutes counts as incoming
+// traffic, so the server stays awake. Render sets RENDER_EXTERNAL_URL automatically;
+// KEEP_ALIVE_URL overrides it, and KEEP_ALIVE=false turns this off (e.g. on a paid plan).
+const KEEP_ALIVE_MS = 10 * 60 * 1000;
+function startKeepAlive() {
+  const baseUrl = (process.env.KEEP_ALIVE_URL || process.env.RENDER_EXTERNAL_URL || '').replace(/\/$/, '');
+  if (!baseUrl || process.env.KEEP_ALIVE === 'false') return;
+  const url = `${baseUrl}/api/health`;
+  const ping = () => fetch(url)
+    .then(res => { if (!res.ok) console.warn(`Keep-alive: ${url} answered ${res.status}`); })
+    .catch(err => console.warn(`Keep-alive ping failed: ${err.message}`));
+  setInterval(ping, KEEP_ALIVE_MS);
+  console.log(`Keep-alive: pinging ${url} every ${KEEP_ALIVE_MS / 60000} minutes`);
+}
+
 mongoose.connect(process.env.MONGODB_URI)
   .then(() => {
     console.log('MongoDB connected');
     const PORT = process.env.PORT || 5000;
-    server.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+    server.listen(PORT, () => {
+      console.log(`Server running on port ${PORT}`);
+      startKeepAlive();
+    });
   })
   .catch(err => {
     console.error('MongoDB connection error:', err.message);

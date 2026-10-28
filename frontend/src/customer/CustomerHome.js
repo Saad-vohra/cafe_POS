@@ -275,46 +275,7 @@ export default function CustomerHome() {
         </div>
       </div>
 
-      {/* My Reward QR Banner */}
-      <div style={{ padding: '18px 18px 24px' }}>
-        <div
-          onClick={() => navigate('/customer/reward-qr')}
-          style={{
-            background: 'linear-gradient(135deg, #087F45 0%, #055C31 100%)',
-            color: 'white',
-            borderRadius: 18,
-            padding: '16px 20px',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            cursor: 'pointer',
-            boxShadow: '0 6px 18px rgba(8, 127, 69, 0.25)'
-          }}
-        >
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <div style={{
-              width: 44,
-              height: 44,
-              borderRadius: 12,
-              background: 'white',
-              color: '#087F45',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              fontSize: 22
-            }}>
-              📱
-            </div>
-            <div>
-              <div style={{ fontWeight: 800, fontSize: 15 }}>My Reward QR Code</div>
-              <div style={{ fontSize: 12, opacity: 0.88 }}>Show to waiter to add stamps</div>
-            </div>
-          </div>
-          <span style={{ fontWeight: 800, fontSize: 14, background: 'rgba(255,255,255,0.2)', padding: '5px 12px', borderRadius: 20 }}>
-            Show QR
-          </span>
-        </div>
-      </div>
+      <div style={{ height: 24 }} />
     </div>
   );
 }

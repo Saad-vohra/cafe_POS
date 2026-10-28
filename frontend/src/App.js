@@ -18,7 +18,6 @@ import CustomerMenu from './customer/CustomerMenu';
 import CustomerCart from './customer/CustomerCart';
 import CustomerOrderStatus from './customer/CustomerOrderStatus';
 import CustomerRewards from './customer/CustomerRewards';
-import CustomerRewardQR from './customer/CustomerRewardQR';
 import CustomerCallBill from './customer/CustomerCallBill';
 import CustomerProfile from './customer/CustomerProfile';
 
@@ -48,7 +47,6 @@ function AppRoutes() {
                 <Route path="cart" element={<CustomerCart />} />
                 <Route path="order-status" element={<CustomerOrderStatus />} />
                 <Route path="rewards" element={<CustomerRewards />} />
-                <Route path="reward-qr" element={<CustomerRewardQR />} />
                 <Route path="bill" element={<CustomerCallBill />} />
                 <Route path="pay" element={<Navigate to="/customer/bill" replace />} />
                 <Route path="profile" element={<CustomerProfile />} />
